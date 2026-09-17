@@ -1,0 +1,9 @@
+# run_native.py needs NOTHING from this file — it is standard library only.
+# These are for run_langchain.py.
+
+langchain-core>=0.3.0,<2.0
+langchain-openai>=0.2.0,<2.0
+
+# Already a transitive dependency of langchain-openai, but named explicitly because
+# run_langchain.py imports it directly to install a response hook (see CephableRecordCapture).
+httpx>=0.27

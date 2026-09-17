@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Copy to gateway.config.json and replace the keys array with output from: npm run keygen",
+    "Only SHA-256 hashes live here, never the keys themselves, so this file is not a set of",
+    "working credentials. Revoke a caller by deleting its entry and restarting."
+  ],
+  "keys": [
+    {
+      "id": "demo-client",
+      "label": "Demo client - laptop",
+      "sha256": "REPLACE_ME_WITH_OUTPUT_FROM_npm_run_keygen",
+      "allowInlineMcp": false,
+      "maxTimeoutMs": 120000
+    },
+    {
+      "id": "partner-integration",
+      "label": "Partner integration - hosts its own MCP server",
+      "sha256": "REPLACE_ME_WITH_OUTPUT_FROM_npm_run_keygen",
+      "allowInlineMcp": true,
+      "maxTimeoutMs": 180000
+    }
+  ]
+}

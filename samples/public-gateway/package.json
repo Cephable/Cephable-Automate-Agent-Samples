@@ -1,0 +1,26 @@
+{
+  "name": "cephable-public-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Safely expose one machine's Cephable Automate HTTP Server to remote callers",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "start": "node src/server.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "keygen": "node src/keygen.ts"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.0",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

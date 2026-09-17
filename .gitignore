@@ -1,0 +1,49 @@
+# --- Secrets -----------------------------------------------------------------
+# The Automate access key is a password. Never commit one.
+.env
+.env.*
+!.env.example
+*.key
+appsettings.Local.json
+
+# --- Node --------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+npm-debug.log*
+yarn-error.log*
+.turbo/
+.vercel/
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- .NET --------------------------------------------------------------------
+bin/
+obj/
+*.user
+.vs/
+AppPackages/
+BundleArtifacts/
+*.appx
+*.msix
+*.pfx
+generated/
+
+# --- Editors / OS ------------------------------------------------------------
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
