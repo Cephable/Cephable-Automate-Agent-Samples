@@ -7,6 +7,110 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+
+                <!--
+                  Theme dictionaries rather than a hardcoded dark theme. Forcing one look would be the
+                  easy way to get an "AI app" aesthetic, but this is an accessibility company's sample:
+                  it follows the system, including high contrast.
+                -->
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+
+                        <ResourceDictionary x:Key="Default">
+                            <!-- Surfaces sit ON TOP of Mica, so they are translucent: the desktop
+                                 tint shows through and the window feels part of the shell. -->
+                            <SolidColorBrush x:Key="SurfaceBrush" Color="#14FFFFFF" />
+                            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#1FFFFFFF" />
+                            <SolidColorBrush x:Key="HairlineBrush" Color="#1AFFFFFF" />
+                            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F2F5FA" />
+                            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#96A4BC" />
+                            <SolidColorBrush x:Key="TextTertiaryBrush" Color="#6B7A94" />
+
+                            <!-- One accent per actor, so the transcript is readable at a glance
+                                 without relying on reading every label. -->
+                            <SolidColorBrush x:Key="AccentCephableBrush" Color="#6DB9E7" />
+                            <SolidColorBrush x:Key="AccentWindowsBrush" Color="#7DD3A0" />
+                            <SolidColorBrush x:Key="AccentToolBrush" Color="#C1A8FF" />
+                            <SolidColorBrush x:Key="AccentUserBrush" Color="#8FA0BF" />
+                            <SolidColorBrush x:Key="AccentDangerBrush" Color="#FF7A94" />
+                            <SolidColorBrush x:Key="AccentIdleBrush" Color="#4A5568" />
+
+                            <LinearGradientBrush x:Key="BrandMarkBrush" StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#6DB9E7" Offset="0" />
+                                <GradientStop Color="#9B7BFF" Offset="1" />
+                            </LinearGradientBrush>
+                        </ResourceDictionary>
+
+                        <ResourceDictionary x:Key="Light">
+                            <SolidColorBrush x:Key="SurfaceBrush" Color="#8AFFFFFF" />
+                            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#C7FFFFFF" />
+                            <SolidColorBrush x:Key="HairlineBrush" Color="#18000000" />
+                            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#0F1B2D" />
+                            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#53637D" />
+                            <SolidColorBrush x:Key="TextTertiaryBrush" Color="#7A88A0" />
+
+                            <SolidColorBrush x:Key="AccentCephableBrush" Color="#1F6FA8" />
+                            <SolidColorBrush x:Key="AccentWindowsBrush" Color="#17794A" />
+                            <SolidColorBrush x:Key="AccentToolBrush" Color="#6B4BC4" />
+                            <SolidColorBrush x:Key="AccentUserBrush" Color="#53637D" />
+                            <SolidColorBrush x:Key="AccentDangerBrush" Color="#C0284A" />
+                            <SolidColorBrush x:Key="AccentIdleBrush" Color="#AFBACB" />
+
+                            <LinearGradientBrush x:Key="BrandMarkBrush" StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#2A7FBE" Offset="0" />
+                                <GradientStop Color="#7A57E0" Offset="1" />
+                            </LinearGradientBrush>
+                        </ResourceDictionary>
+
+                        <!-- High contrast: defer entirely to the system brushes. A decorative palette
+                             here is exactly what a high-contrast user turned the setting on to avoid. -->
+                        <ResourceDictionary x:Key="HighContrast">
+                            <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                            <SolidColorBrush x:Key="HairlineBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                            <SolidColorBrush x:Key="TextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                            <SolidColorBrush x:Key="TextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                            <SolidColorBrush x:Key="TextTertiaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+                            <SolidColorBrush x:Key="AccentCephableBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                            <SolidColorBrush x:Key="AccentWindowsBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                            <SolidColorBrush x:Key="AccentToolBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                            <SolidColorBrush x:Key="AccentUserBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+                            <SolidColorBrush x:Key="AccentDangerBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+                            <SolidColorBrush x:Key="AccentIdleBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+                            <SolidColorBrush x:Key="BrandMarkBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                        </ResourceDictionary>
+
+                    </ResourceDictionary.ThemeDictionaries>
+
+                    <!-- ── shared shape language ─────────────────────────────────────────── -->
+
+                    <x:Double x:Key="CardRadius">10</x:Double>
+                    <CornerRadius x:Key="CardCornerRadius">10</CornerRadius>
+                    <CornerRadius x:Key="PillCornerRadius">14</CornerRadius>
+
+                    <Style x:Key="CardBorderStyle" TargetType="Border">
+                        <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                        <Setter Property="BorderBrush" Value="{ThemeResource HairlineBrush}" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+                        <Setter Property="Padding" Value="16" />
+                    </Style>
+
+                    <Style x:Key="SectionLabelStyle" TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{ThemeResource TextTertiaryBrush}" />
+                        <Setter Property="FontSize" Value="11" />
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                        <Setter Property="CharacterSpacing" Value="80" />
+                    </Style>
+
+                    <Style x:Key="MonoTextStyle" TargetType="TextBlock">
+                        <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New" />
+                        <Setter Property="FontSize" Value="12.5" />
+                        <Setter Property="IsTextSelectionEnabled" Value="True" />
+                        <Setter Property="TextWrapping" Value="Wrap" />
+                    </Style>
+
+                </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

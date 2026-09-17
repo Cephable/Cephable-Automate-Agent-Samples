@@ -5,132 +5,303 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:CephableDesk"
     xmlns:services="using:CephableDesk.Services"
-    Title="Cephable Desk - on-device agent">
+    Title="Cephable Desk">
 
-    <Grid Padding="20" RowSpacing="14" AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
+    <Grid AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Status: which local model, which accelerator, whether Windows AI is available -->
-        <StackPanel Grid.Row="0" Spacing="4">
-            <TextBlock Text="Cephable Desk" Style="{StaticResource TitleTextBlockStyle}" />
+        <!-- ── title bar ───────────────────────────────────────────────────────
+             Drag region for the extended title bar. The window chrome is removed in
+             code-behind and Mica shows through, so this row IS the title bar. -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="44" Padding="16,0" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border
+                Grid.Column="0"
+                Width="18"
+                Height="18"
+                CornerRadius="5"
+                VerticalAlignment="Center"
+                Background="{ThemeResource BrandMarkBrush}" />
             <TextBlock
-                Text="Three on-device AI systems, no network: Windows OCR reads what you paste, Phi Silica summarizes and rewrites it, and Cephable's agent decides what to do."
-                TextWrapping="Wrap"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Style="{StaticResource CaptionTextBlockStyle}" />
-            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,6,0,0">
-                <InfoBadge x:Name="CephableBadge" Value="0" Visibility="Collapsed" />
-                <TextBlock x:Name="CephableStatus" Text="Connecting to Cephable..." Style="{StaticResource CaptionTextBlockStyle}" />
-                <TextBlock x:Name="WindowsAiStatus" Text="" Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                Grid.Column="1"
+                Text="Cephable Desk"
+                VerticalAlignment="Center"
+                FontSize="12.5"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource TextSecondaryBrush}" />
+        </Grid>
+
+        <!-- ── header ──────────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="1" Padding="24,8,24,16" Spacing="14">
+            <StackPanel Spacing="4">
+                <TextBlock FontSize="26" FontWeight="SemiBold" Foreground="{ThemeResource TextPrimaryBrush}">
+                    Three AI systems. <Run Foreground="{ThemeResource AccentCephableBrush}">No network.</Run>
+                </TextBlock>
+                <TextBlock
+                    Text="Windows OCR reads what you paste, Phi Silica summarizes and rewrites it, and Cephable's agent decides what to do. All on this device."
+                    TextWrapping="Wrap"
+                    MaxWidth="620"
+                    HorizontalAlignment="Left"
+                    FontSize="13"
+                    Foreground="{ThemeResource TextSecondaryBrush}" />
             </StackPanel>
+
+            <!-- Live status of each engine, so the machine's real capability is visible up front. -->
+            <ItemsControl x:Name="StatusPills">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="8" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:EnginePill">
+                        <Border
+                            Background="{ThemeResource SurfaceBrush}"
+                            BorderBrush="{ThemeResource HairlineBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource PillCornerRadius}"
+                            Padding="10,5">
+                            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind Accent}" />
+                                <TextBlock
+                                    Text="{x:Bind Name}"
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource TextPrimaryBrush}" />
+                                <TextBlock
+                                    Text="{x:Bind Detail}"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextTertiaryBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
 
-        <!-- The pasted document -->
-        <Border
-            Grid.Row="1"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="6"
-            Padding="12">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Pasted document" Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock
-                        x:Name="ScreenTextPreview"
-                        Text="Paste an image (Ctrl+V) or drop a PNG here. Windows OCR will read it on this device."
-                        TextWrapping="Wrap"
-                        MaxLines="4"
-                        TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-                    <Button x:Name="PasteButton" Content="Paste image" Click="OnPasteClicked" />
-                    <Button x:Name="OpenButton" Content="Open..." Click="OnOpenClicked" />
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- Transcript and notes -->
-        <Grid Grid.Row="2" ColumnSpacing="14">
+        <!-- ── body ────────────────────────────────────────────────────────── -->
+        <Grid Grid.Row="2" Padding="24,0,24,20" ColumnSpacing="16" RowSpacing="14">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="3*" MinWidth="420" />
+                <ColumnDefinition Width="1.15*" MinWidth="240" />
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <ScrollViewer Grid.Column="0" x:Name="TranscriptScroller">
-                <ItemsControl x:Name="Transcript" Margin="0,0,8,0">
+            <!-- what you pasted -->
+            <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="14">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border
+                        Grid.Column="0"
+                        Width="3"
+                        CornerRadius="2"
+                        Background="{ThemeResource AccentWindowsBrush}"
+                        VerticalAlignment="Stretch" />
+                    <StackPanel Grid.Column="1" Spacing="3">
+                        <TextBlock Text="PASTED DOCUMENT · WINDOWS OCR" Style="{StaticResource SectionLabelStyle}" />
+                        <TextBlock
+                            x:Name="ScreenTextPreview"
+                            Text="Press Ctrl+V, or drop a PNG anywhere on this window."
+                            TextWrapping="Wrap"
+                            MaxLines="3"
+                            TextTrimming="CharacterEllipsis"
+                            FontSize="13"
+                            Foreground="{ThemeResource TextSecondaryBrush}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button x:Name="PasteButton" Content="Paste" Click="OnPasteClicked" />
+                        <Button x:Name="OpenButton" Content="Open…" Click="OnOpenClicked" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- transcript -->
+            <ScrollViewer
+                Grid.Row="1"
+                Grid.Column="0"
+                x:Name="TranscriptScroller"
+                Margin="0,14,0,0"
+                VerticalScrollBarVisibility="Auto"
+                Padding="0,0,6,0">
+                <ItemsControl x:Name="Transcript">
+                    <ItemsControl.ItemContainerTransitions>
+                        <!-- Built-in entrance/reflow animation: each tool call slides in as it lands,
+                             which is what makes the agent's work read as a sequence. -->
+                        <TransitionCollection>
+                            <AddDeleteThemeTransition />
+                            <RepositionThemeTransition />
+                        </TransitionCollection>
+                    </ItemsControl.ItemContainerTransitions>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:TranscriptEntry">
-                            <Border
-                                Margin="0,0,0,6"
-                                Padding="10,7"
-                                CornerRadius="4"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderThickness="0,0,0,0">
-                                <StackPanel Spacing="2">
-                                    <TextBlock
-                                        Text="{x:Bind Kind}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                </StackPanel>
-                            </Border>
+                            <Grid Margin="0,0,0,8" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    Grid.Column="0"
+                                    Width="3"
+                                    CornerRadius="2"
+                                    Background="{x:Bind Accent}"
+                                    VerticalAlignment="Stretch" />
+                                <Border
+                                    Grid.Column="1"
+                                    Background="{ThemeResource SurfaceBrush}"
+                                    CornerRadius="{StaticResource CardCornerRadius}"
+                                    Padding="14,11">
+                                    <StackPanel Spacing="5">
+                                        <TextBlock
+                                            Text="{x:Bind Label}"
+                                            Foreground="{x:Bind Accent}"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            CharacterSpacing="80" />
+                                        <TextBlock
+                                            Text="{x:Bind Text}"
+                                            TextWrapping="Wrap"
+                                            IsTextSelectionEnabled="True"
+                                            FontSize="13.5"
+                                            LineHeight="20"
+                                            Foreground="{ThemeResource TextPrimaryBrush}"
+                                            Visibility="{x:Bind ProseVisibility}" />
+                                        <TextBlock
+                                            Text="{x:Bind Text}"
+                                            Style="{StaticResource MonoTextStyle}"
+                                            Foreground="{ThemeResource TextSecondaryBrush}"
+                                            Visibility="{x:Bind MonoVisibility}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
 
-            <Border
-                Grid.Column="1"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="12">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Notes the agent saved" Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <ItemsControl x:Name="NotesList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="services:SavedNote">
-                                <StackPanel Margin="0,0,0,10" Spacing="2">
-                                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                    <TextBlock Text="{x:Bind Body}" TextWrapping="Wrap"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               IsTextSelectionEnabled="True" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+            <!-- notes the agent saved -->
+            <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Style="{StaticResource CardBorderStyle}">
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Spacing="3">
+                        <TextBlock Text="NOTES THE AGENT SAVED" Style="{StaticResource SectionLabelStyle}" />
+                        <TextBlock
+                            x:Name="NotesEmptyHint"
+                            Text="Nothing yet. Ask it to save one."
+                            FontSize="12.5"
+                            Foreground="{ThemeResource TextTertiaryBrush}" />
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="NotesList">
+                            <ItemsControl.ItemContainerTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition />
+                                </TransitionCollection>
+                            </ItemsControl.ItemContainerTransitions>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:SavedNote">
+                                    <Border
+                                        Margin="0,0,0,8"
+                                        Padding="12,10"
+                                        CornerRadius="{StaticResource CardCornerRadius}"
+                                        Background="{ThemeResource SurfaceRaisedBrush}">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock
+                                                Text="{x:Bind Title}"
+                                                FontWeight="SemiBold"
+                                                FontSize="13"
+                                                TextWrapping="Wrap"
+                                                Foreground="{ThemeResource TextPrimaryBrush}" />
+                                            <TextBlock
+                                                Text="{x:Bind Body}"
+                                                TextWrapping="Wrap"
+                                                FontSize="12.5"
+                                                LineHeight="18"
+                                                IsTextSelectionEnabled="True"
+                                                Foreground="{ThemeResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
             </Border>
-        </Grid>
 
-        <!-- Composer -->
-        <Grid Grid.Row="3" ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBox
+            <!-- composer -->
+            <Border
+                Grid.Row="2"
                 Grid.Column="0"
-                x:Name="PromptBox"
-                PlaceholderText="Ask the agent to do something with what you pasted..."
-                KeyDown="OnPromptKeyDown"
-                AcceptsReturn="False" />
-            <Button Grid.Column="1" x:Name="RunButton" Content="Run" Style="{StaticResource AccentButtonStyle}"
-                    Click="OnRunClicked" />
-            <Button Grid.Column="2" x:Name="StopButton" Content="Stop" Click="OnStopClicked" IsEnabled="False" />
+                Grid.ColumnSpan="2"
+                Margin="0,14,0,0"
+                Background="{ThemeResource SurfaceRaisedBrush}"
+                BorderBrush="{ThemeResource HairlineBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource PillCornerRadius}"
+                Padding="6,6,6,6">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ProgressRing
+                        Grid.Column="0"
+                        x:Name="BusyRing"
+                        Width="18"
+                        Height="18"
+                        Margin="10,0,0,0"
+                        IsActive="False"
+                        Visibility="Collapsed"
+                        Foreground="{ThemeResource AccentCephableBrush}" />
+                    <TextBox
+                        Grid.Column="1"
+                        x:Name="PromptBox"
+                        PlaceholderText="Ask the agent to do something with what you pasted…"
+                        KeyDown="OnPromptKeyDown"
+                        AcceptsReturn="False"
+                        BorderThickness="0"
+                        Background="Transparent"
+                        FontSize="14"
+                        Padding="10,8" />
+                    <Button
+                        Grid.Column="2"
+                        x:Name="RunButton"
+                        Content="Run"
+                        MinWidth="76"
+                        CornerRadius="{StaticResource PillCornerRadius}"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="OnRunClicked" />
+                    <Button
+                        Grid.Column="3"
+                        x:Name="StopButton"
+                        Content="Stop"
+                        MinWidth="66"
+                        CornerRadius="{StaticResource PillCornerRadius}"
+                        Click="OnStopClicked"
+                        IsEnabled="False"
+                        Visibility="Collapsed" />
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>

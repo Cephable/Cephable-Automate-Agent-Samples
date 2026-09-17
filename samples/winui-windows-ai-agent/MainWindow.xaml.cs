@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,7 +8,9 @@ using CephableDesk.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Graphics;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
@@ -19,13 +22,48 @@ using VirtualKey = Windows.System.VirtualKey;
 namespace CephableDesk;
 
 /// <summary>One line in the transcript. Bound directly by MainWindow.xaml.</summary>
-public sealed record TranscriptEntry(string Kind, string Text);
+public sealed class TranscriptEntry
+{
+    public TranscriptEntry(string label, string text, Brush accent, bool mono)
+    {
+        Label = label;
+        Text = text;
+        Accent = accent;
+        IsMono = mono;
+    }
+
+    public string Label { get; }
+    public string Text { get; }
+    public Brush Accent { get; }
+    public bool IsMono { get; }
+
+    // Two TextBlocks in the template, one shown. A converter would be the idiomatic answer, but for a
+    // single boolean it is more machinery than the thing it configures.
+    public Visibility MonoVisibility => IsMono ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ProseVisibility => IsMono ? Visibility.Collapsed : Visibility.Visible;
+}
+
+/// <summary>One of the three AI systems, shown as a status pill in the header.</summary>
+public sealed class EnginePill
+{
+    public EnginePill(string name, string detail, Brush accent)
+    {
+        Name = name;
+        Detail = detail;
+        Accent = accent;
+    }
+
+    public string Name { get; }
+    public string Detail { get; }
+    public Brush Accent { get; }
+}
 
 public sealed partial class MainWindow : Window
 {
     private readonly WindowsAiService _windowsAi = new();
     private readonly AgentTools _tools;
     private readonly ObservableCollection<TranscriptEntry> _transcript = new();
+    private readonly ObservableCollection<EnginePill> _engines = new();
     private readonly DispatcherQueue _ui;
 
     private CephableClient? _cephable;
@@ -37,8 +75,28 @@ public sealed partial class MainWindow : Window
         _ui = DispatcherQueue.GetForCurrentThread();
         _tools = new AgentTools(_windowsAi);
 
+        // Mica plus a custom title bar: the window reads as part of the shell rather than a box of
+        // controls. Both degrade quietly on systems that cannot do them.
+        SystemBackdrop = new MicaBackdrop();
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+
+        // AppWindow.Resize is in physical pixels, so a fixed number would come out small on a 150%
+        // display and huge on a 4K one. RasterizationScale is only there once the tree is loaded.
+        if (Content is FrameworkElement root)
+        {
+            root.Loaded += (_, _) =>
+            {
+                double scale = root.XamlRoot?.RasterizationScale ?? 1.0;
+                AppWindow.Resize(new SizeInt32((int)(1180 * scale), (int)(820 * scale)));
+            };
+        }
+
         Transcript.ItemsSource = _transcript;
         NotesList.ItemsSource = _tools.Notes;
+        StatusPills.ItemsSource = _engines;
+
+        _tools.Notes.CollectionChanged += OnNotesChanged;
 
         // The agent saves notes from a worker thread; the collection is bound to the UI, so the append
         // has to be marshalled.
@@ -54,7 +112,7 @@ public sealed partial class MainWindow : Window
         _ = InitializeAsync();
     }
 
-    // ── startup ──────────────────────────────────────────────────────────────
+    // -- startup -------------------------------------------------------------
 
     private async Task InitializeAsync()
     {
@@ -62,13 +120,17 @@ public sealed partial class MainWindow : Window
         // do before they try anything.
         WindowsAiService.Availability model = _windowsAi.CheckLanguageModel();
         WindowsAiService.Availability ocr = _windowsAi.CheckTextRecognizer();
-        WindowsAiStatus.Text = $"Phi Silica: {(model.Ready ? "ready" : "unavailable")}  |  "
-                             + $"Windows OCR: {(ocr.Ready ? "ready" : "unavailable")}";
+
+        _engines.Add(new EnginePill("Cephable", "checking...", Accent("AccentIdleBrush")));
+        _engines.Add(Engine("Phi Silica", model.Ready, model.Ready ? "on device" : "unavailable", "AccentWindowsBrush"));
+        _engines.Add(Engine("Windows OCR", ocr.Ready, ocr.Ready ? "on device" : "unavailable", "AccentWindowsBrush"));
 
         string? token = Environment.GetEnvironmentVariable("CEPHABLE_AUTOMATE_KEY");
         if (string.IsNullOrWhiteSpace(token))
         {
-            CephableStatus.Text = "CEPHABLE_AUTOMATE_KEY is not set - see the README";
+            SetCephablePill("Cephable", "CEPHABLE_AUTOMATE_KEY is not set", ready: false);
+            Add("app", "Set CEPHABLE_AUTOMATE_KEY to the access key from Cephable's Automate Server "
+                     + "extension, then restart this app. The README has the steps.");
             RunButton.IsEnabled = false;
             return;
         }
@@ -79,18 +141,27 @@ public sealed partial class MainWindow : Window
         {
             CephableHealth health = await _cephable.GetHealthAsync();
             string accelerator = health.Backend?.Accelerator ?? "?";
-            string fallback = health.Backend?.CpuFallback == true ? " (CPU fallback)" : string.Empty;
-            CephableStatus.Text = $"Cephable {health.AppVersion} at {_cephable.Endpoint}  |  "
-                                + $"{health.ModelName}  |  {accelerator}{fallback}";
+            string fallback = health.Backend?.CpuFallback == true ? " - CPU fallback" : string.Empty;
+            SetCephablePill(
+                $"Cephable {health.AppVersion}",
+                $"{health.ModelName} - {accelerator}{fallback}",
+                ready: true);
         }
         catch (Exception error)
         {
-            CephableStatus.Text = Explain(error);
+            SetCephablePill("Cephable", "not reachable", ready: false);
+            Add("app", Explain(error));
             RunButton.IsEnabled = false;
         }
     }
 
-    // ── pasting an image ─────────────────────────────────────────────────────
+    private EnginePill Engine(string name, bool ready, string detail, string readyBrushKey) =>
+        new(name, detail, Accent(ready ? readyBrushKey : "AccentIdleBrush"));
+
+    private void SetCephablePill(string name, string detail, bool ready) =>
+        _engines[0] = Engine(name, ready, detail, "AccentCephableBrush");
+
+    // -- pasting an image ----------------------------------------------------
 
     private async void OnPasteClicked(object sender, RoutedEventArgs e)
     {
@@ -170,7 +241,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // ── running the agent ────────────────────────────────────────────────────
+    // -- running the agent ---------------------------------------------------
 
     private void OnPromptKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -265,21 +336,52 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // ── UI helpers ───────────────────────────────────────────────────────────
+    // -- UI helpers ----------------------------------------------------------
 
     private void SetRunning(bool running)
     {
+        // Run and Stop swap places rather than sitting side by side: only one of them is ever the
+        // thing to press.
         RunButton.IsEnabled = !running && _cephable is not null;
+        RunButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         StopButton.IsEnabled = running;
+        StopButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         PromptBox.IsEnabled = !running;
+        BusyRing.IsActive = running;
+        BusyRing.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void OnNotesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        NotesEmptyHint.Visibility = _tools.Notes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Append to the transcript from any thread.</summary>
     private void Add(string kind, string text) => _ui.TryEnqueue(() =>
     {
-        _transcript.Add(new TranscriptEntry(kind, text));
+        (string label, string brushKey, bool mono) = kind switch
+        {
+            "you" => ("YOU", "AccentUserBrush", false),
+            "cephable" => ("CEPHABLE", "AccentCephableBrush", false),
+            "windows ocr" => ("WINDOWS OCR", "AccentWindowsBrush", false),
+            "agent calls" => ("TOOL CALL", "AccentToolBrush", true),
+            "tool result" => ("TOOL RESULT", "AccentToolBrush", true),
+            "tool failed" => ("TOOL FAILED", "AccentDangerBrush", true),
+            "run" => ("RUN", "AccentIdleBrush", true),
+            _ => ("APP", "AccentIdleBrush", false),
+        };
+
+        _transcript.Add(new TranscriptEntry(label, text, Accent(brushKey), mono));
         TranscriptScroller.ChangeView(null, TranscriptScroller.ScrollableHeight + 400, null);
     });
+
+    /// <summary>
+    /// Resolves a theme brush by key. The brush is captured when the entry is created, so rows already
+    /// in the transcript keep their colors if the system theme flips mid-session. Re-tinting history
+    /// would mean INotifyPropertyChanged on every row for a case nobody watches.
+    /// </summary>
+    private static Brush Accent(string key) =>
+        Application.Current.Resources.TryGetValue(key, out object? brush) && brush is Brush found
+            ? found
+            : new SolidColorBrush(Microsoft.UI.Colors.Gray);
 
     private static string Compact(string json) =>
         json.Length <= 120 ? json.Replace("\r", " ").Replace("\n", " ") : json[..117] + "...";
