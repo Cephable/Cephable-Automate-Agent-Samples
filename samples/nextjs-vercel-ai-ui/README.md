@@ -1,7 +1,8 @@
-# Next.js + Vercel AI SDK
+# Next.js + Vercel AI SDK + AI Elements
 
-A chat UI built with the **Vercel AI SDK**, driving Cephable's on-device agent and streaming its **real
-tool calls and steps** into the browser as they happen.
+A chat UI built with the **Vercel AI SDK** and **[AI Elements](https://ai-sdk.dev/elements)** — Vercel's
+official component library for AI interfaces — driving Cephable's on-device agent and streaming its
+**real tool calls and steps** into the browser as they happen.
 
 The scenario is an incident review. The agent's tools are this app's own functions — and two of them
 don't return data to the agent at all, they *draw into the page*: `render_timeline` puts a timeline on
@@ -12,12 +13,17 @@ of an app rather than a text box bolted onto one.
 
 ## What this shows
 
+- **AI Elements, unmodified, over a local agent.** The transcript, message bubbles, markdown renderer,
+  collapsible tool cards, step list and composer are all stock components. The route emits the AI SDK's
+  own `tool-*` chunks, so a Cephable tool call renders through `<Tool>` with **no translation layer** —
+  which is the whole point of hooking into the SDK's shapes rather than inventing your own.
 - **The AI SDK's UI primitives over a non-streaming agent.** Cephable's `/v1/runs` blocks until the run
   finishes — it has no token stream. But the park/resume loop *is* a real sequence of events, so the
   route writes each one into a `UIMessageStream` as it lands. The UI fills in as the agent works,
   without pretending to stream tokens that do not exist.
-- **Typed custom data parts.** Tool calls, tool results, timelines, drafts, the step list and the run
-  footer all arrive as `data-*` parts on the assistant message. Rendering is a switch over `part.type`.
+- **Typed custom data parts where the SDK has no shape.** The local-runtime header, the two UI-effect
+  payloads, the agent's step list and the run footer arrive as `data-*` parts. Everything the SDK
+  already models uses the SDK's model.
 - **Tools whose output is UI.** A tool returns a short confirmation to the agent and pushes its real
   payload to the browser. The agent does not have to re-read what it just drew.
 - **Why the route handler is the client.** The Automate server sends no CORS headers and has no
@@ -124,10 +130,10 @@ useChat ──POST /api/chat──▶ waitUntilReady()  ────────
                             startRun(clientTools) ───────────▶ POST /v1/runs
                           ◀─ writes data-run-started
                                                     ◀───────── status: awaiting_tool_results
-                          ◀─ writes data-tool-call             (the run parks, still holding the slot)
+                          ◀─ writes tool-input-available       (the run parks, still holding the slot)
                             handlerFor(name)(args)
                           ◀─ writes data-timeline / data-draft
-                          ◀─ writes data-tool-result
+                          ◀─ writes tool-output-available
                             resumeRun(token, results) ───────▶ POST /v1/runs/{token}/tool-results
                                                     ◀───────── …repeat, or the finished record
                           ◀─ writes text-start/delta/end
@@ -136,11 +142,35 @@ useChat ──POST /api/chat──▶ waitUntilReady()  ────────
 
 | File | What it is |
 |---|---|
-| **`app/api/chat/route.ts`** | **The interesting file.** The park/resume loop, written into a `UIMessageStream`. Also where the `data-*` part types are declared. |
+| **`app/api/chat/route.ts`** | **The interesting file.** The park/resume loop, written into a `UIMessageStream` as SDK tool chunks plus custom `data-*` parts. |
 | **`lib/tools.ts`** | This app's tools: three reads and two that emit UI. Replace with your own. |
 | `lib/cephable.ts` | Server-side client: port discovery, readiness, runs, resume, cancel. |
-| `components/Chat.tsx` | `useChat` plus a switch over `part.type`. |
+| `components/Chat.tsx` | `useChat` plus AI Elements, and a switch over `part.type`. |
+| `components/ai-elements/` | Vendored AI Elements components, added by its CLI. Yours to edit — that is the shadcn model. |
+| `components/ui/` | The shadcn/ui primitives AI Elements builds on. Also vendored. |
 | `data/incidents.json` | Demo data. Two incidents share a root cause on purpose, and one service is deliberately over budget, so there is something to actually notice. |
+
+### How AI Elements got here
+
+AI Elements is a shadcn registry, not a runtime dependency: its CLI **copies components into your
+repo**, so `components/ai-elements/` and `components/ui/` are yours to edit. This sample was set up
+with Tailwind v4 plus the usual shadcn scaffolding (`components.json`, `lib/utils.ts`, the token set in
+`app/globals.css`), then:
+
+```bash
+npx ai-elements@latest add conversation message prompt-input tool task
+```
+
+Two things that cost time and are worth knowing:
+
+* **The components track the newest `ai`.** The generated `tool.tsx` references tool-approval states
+  that only exist in recent versions, so it will not typecheck against an older SDK. This sample pins
+  `ai` and `@ai-sdk/react` to a matching pair (`ai` 7 with `@ai-sdk/react` 4) — they are released in
+  lockstep, so upgrade them together.
+* **`createUIMessageStream` no longer injects `start` / `finish`.** As of `ai` v7 you write them
+  yourself. Without a `start` the client never opens an assistant message, so every part streams
+  correctly and renders *nowhere* — a silent failure with no console error. See the top of the route's
+  `execute`, and note the `finish` on each early-return path.
 
 ### Three things worth copying
 

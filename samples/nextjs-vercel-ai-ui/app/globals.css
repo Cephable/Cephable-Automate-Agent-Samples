@@ -1,362 +1,93 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/*
+ * shadcn/ui's token set, which every AI Elements component styles against. Kept as close to the
+ * stock "slate" base as possible so the components look the way their docs show them, with the
+ * accent swapped for Cephable's blue.
+ */
+
+@custom-variant dark (&:is(.dark *));
+
 :root {
-    --bg: #0b1220;
-    --surface: #131c2e;
-    --surface-2: #1b2740;
-    --border: #27344f;
-    --text: #e8edf7;
-    --muted: #8fa0bf;
-    --accent: #6db9e7;
-    --ok: #55c98a;
-    --warn: #f4ae10;
-    --error: #ee486f;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 0.625rem;
+
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.129 0.042 264.695);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.129 0.042 264.695);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.129 0.042 264.695);
+    --primary: oklch(0.55 0.11 237);
+    --primary-foreground: oklch(0.984 0.003 247.858);
+    --secondary: oklch(0.968 0.007 247.896);
+    --secondary-foreground: oklch(0.208 0.042 265.755);
+    --muted: oklch(0.968 0.007 247.896);
+    --muted-foreground: oklch(0.554 0.046 257.417);
+    --accent: oklch(0.968 0.007 247.896);
+    --accent-foreground: oklch(0.208 0.042 265.755);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.984 0.003 247.858);
+    --border: oklch(0.929 0.013 255.508);
+    --input: oklch(0.929 0.013 255.508);
+    --ring: oklch(0.55 0.11 237);
 }
 
-@media (prefers-color-scheme: light) {
-    :root {
-        --bg: #f7f9fc;
-        --surface: #ffffff;
-        --surface-2: #eef2f8;
-        --border: #d7dfeb;
-        --text: #10182a;
-        --muted: #5b6b86;
-        --accent: #2a6fa8;
+.dark {
+    --background: oklch(0.18 0.03 258);
+    --foreground: oklch(0.984 0.003 247.858);
+    --card: oklch(0.23 0.032 258);
+    --card-foreground: oklch(0.984 0.003 247.858);
+    --popover: oklch(0.23 0.032 258);
+    --popover-foreground: oklch(0.984 0.003 247.858);
+    --primary: oklch(0.72 0.1 237);
+    --primary-foreground: oklch(0.18 0.03 258);
+    --secondary: oklch(0.279 0.041 260.031);
+    --secondary-foreground: oklch(0.984 0.003 247.858);
+    --muted: oklch(0.279 0.041 260.031);
+    --muted-foreground: oklch(0.704 0.04 256.788);
+    --accent: oklch(0.279 0.041 260.031);
+    --accent-foreground: oklch(0.984 0.003 247.858);
+    --destructive: oklch(0.704 0.191 22.216);
+    --destructive-foreground: oklch(0.984 0.003 247.858);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.72 0.1 237);
+}
+
+@theme inline {
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
     }
-}
 
-* {
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font: 15px/1.55 system-ui, -apple-system, Segoe UI, sans-serif;
-}
-
-main {
-    max-width: 880px;
-    margin: 0 auto;
-    padding: 2rem 1rem 3rem;
-}
-
-header h1 {
-    margin: 0 0 0.25rem;
-    font-size: 1.4rem;
-}
-
-header p {
-    margin: 0 0 1.5rem;
-    color: var(--muted);
-    max-width: 62ch;
-}
-
-/* ── chat ─────────────────────────────────────────────────────────────── */
-
-.chat {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.transcript {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    min-height: 40vh;
-}
-
-.empty {
-    padding: 1.5rem;
-    border: 1px dashed var(--border);
-    border-radius: 0.75rem;
-}
-
-.empty h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.1rem;
-}
-
-.empty p {
-    margin: 0 0 1rem;
-    color: var(--muted);
-}
-
-.suggestions {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.suggestions button {
-    text-align: left;
-    padding: 0.6rem 0.75rem;
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    cursor: pointer;
-    font: inherit;
-}
-
-.suggestions button:hover {
-    border-color: var(--accent);
-}
-
-.message {
-    display: grid;
-    grid-template-columns: 5.5rem 1fr;
-    gap: 0.75rem;
-}
-
-.message .who {
-    color: var(--muted);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding-top: 0.15rem;
-}
-
-.message.user .text {
-    background: var(--surface-2);
-    padding: 0.6rem 0.8rem;
-    border-radius: 0.5rem;
-}
-
-.parts {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
-}
-
-.text {
-    white-space: pre-wrap;
-}
-
-/* ── run chrome ───────────────────────────────────────────────────────── */
-
-.run-header,
-.run-footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-    font-size: 0.78rem;
-    color: var(--muted);
-    font-family: var(--mono);
-}
-
-.badge {
-    background: var(--accent);
-    color: var(--bg);
-    padding: 0.1rem 0.4rem;
-    border-radius: 0.25rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-}
-
-.warn {
-    color: var(--warn);
-}
-
-/* ── tool calls ───────────────────────────────────────────────────────── */
-
-.tool-call {
-    display: flex;
-    gap: 0.5rem;
-    align-items: baseline;
-    font-family: var(--mono);
-    font-size: 0.82rem;
-    padding: 0.35rem 0.6rem;
-    background: var(--surface);
-    border-left: 2px solid var(--accent);
-    border-radius: 0 0.35rem 0.35rem 0;
-    overflow-wrap: anywhere;
-}
-
-.tool-call code {
-    color: var(--accent);
-}
-
-.tool-call .args {
-    color: var(--muted);
-}
-
-.tool-result {
-    font-size: 0.8rem;
-    color: var(--ok);
-    padding-left: 0.6rem;
-    overflow-wrap: anywhere;
-}
-
-.tool-result.failed {
-    color: var(--error);
-}
-
-/* ── the two UI tools ─────────────────────────────────────────────────── */
-
-.timeline {
-    border: 1px solid var(--border);
-    border-radius: 0.6rem;
-    padding: 0.85rem;
-    background: var(--surface);
-}
-
-.timeline-title {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--muted);
-    margin-bottom: 0.6rem;
-}
-
-.event {
-    display: grid;
-    grid-template-columns: 9rem 1fr;
-    gap: 0.75rem;
-    padding: 0.5rem 0;
-    border-top: 1px solid var(--border);
-}
-
-.event:first-of-type {
-    border-top: 0;
-}
-
-.event .when {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--muted);
-}
-
-.event .meta {
-    font-size: 0.78rem;
-    color: var(--muted);
-}
-
-.event .cause {
-    font-size: 0.82rem;
-    margin-top: 0.3rem;
-}
-
-.event.sev1 strong {
-    color: var(--error);
-}
-
-.event.sev2 strong {
-    color: var(--warn);
-}
-
-.draft {
-    border: 1px solid var(--accent);
-    border-radius: 0.6rem;
-    padding: 0.85rem;
-    background: var(--surface);
-}
-
-.draft-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-}
-
-.draft p {
-    margin: 0;
-    white-space: pre-wrap;
-}
-
-.draft button,
-.composer button {
-    padding: 0.4rem 0.8rem;
-    background: var(--accent);
-    color: var(--bg);
-    border: 0;
-    border-radius: 0.35rem;
-    cursor: pointer;
-    font: inherit;
-    font-weight: 600;
-}
-
-/* ── steps, notices, composer ─────────────────────────────────────────── */
-
-.steps {
-    font-size: 0.82rem;
-    color: var(--muted);
-}
-
-.steps summary {
-    cursor: pointer;
-}
-
-.steps ol {
-    margin: 0.5rem 0 0;
-    padding-left: 1.25rem;
-}
-
-.steps li code {
-    margin-left: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--accent);
-}
-
-.steps li.failed {
-    color: var(--error);
-}
-
-.notice {
-    padding: 0.6rem 0.8rem;
-    border-radius: 0.45rem;
-    background: var(--surface-2);
-    font-size: 0.88rem;
-}
-
-.notice.error {
-    border-left: 3px solid var(--error);
-}
-
-.working {
-    color: var(--muted);
-    font-size: 0.85rem;
-    font-style: italic;
-}
-
-.composer {
-    display: flex;
-    gap: 0.5rem;
-    position: sticky;
-    bottom: 0;
-    padding: 0.75rem 0;
-    background: linear-gradient(to top, var(--bg) 70%, transparent);
-}
-
-.composer input {
-    flex: 1;
-    min-width: 0;
-    padding: 0.6rem 0.75rem;
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 0.45rem;
-    font: inherit;
-}
-
-.composer input:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: -1px;
-}
-
-.composer button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-
-@media (max-width: 620px) {
-    .message,
-    .event {
-        grid-template-columns: 1fr;
-        gap: 0.35rem;
+    body {
+        @apply bg-background text-foreground;
     }
 }

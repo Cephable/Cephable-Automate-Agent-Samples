@@ -19,7 +19,7 @@ The Wi-Fi line is not a gimmick. It is the demo. Everything else is context for 
 | Audience | Show | Because |
 |---|---|---|
 | **Developers / technical eval** | [python-langchain-tools](../samples/python-langchain-tools) | LangChain works with a two-line change. Familiar ground, immediate "oh, that's it?" |
-| **Product / business** | [nextjs-vercel-ai-ui](../samples/nextjs-vercel-ai-ui) | Visual. The agent draws a timeline and writes a draft on screen. |
+| **Product / business** | [nextjs-vercel-ai-ui](../samples/nextjs-vercel-ai-ui) | Visual, and built from Vercel's own AI Elements components. The agent draws a timeline and writes a draft on screen. |
 | **Windows / enterprise IT** | [winui-windows-ai-agent](../samples/winui-windows-ai-agent) | Three on-device AI systems cooperating, including Windows' own. Nothing to procure. |
 | **Security / architecture review** | [public-gateway](../samples/public-gateway) | Shows you have thought about the boundary, and can refuse things. Earns more trust than any feature. |
 

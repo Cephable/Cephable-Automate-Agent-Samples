@@ -1,24 +1,45 @@
 'use client';
 
 /**
- * The chat surface.
+ * The chat surface, built from Vercel's AI Elements components.
  *
- * `useChat` from `@ai-sdk/react` does the transport and message state. Everything Cephable-specific
- * arrives as typed data parts on the assistant message — tool calls, tool results, rendered timelines,
- * drafts, the step list, and the run footer — so rendering is just a switch over `part.type`.
+ * Almost nothing here is bespoke. `useChat` handles transport and message state, and AI Elements
+ * supplies the transcript (`Conversation`), the bubbles (`Message`), the markdown renderer
+ * (`MessageResponse`), the collapsible tool cards (`Tool`), the step list (`Task`) and the composer
+ * (`PromptInput`). The route emits the SDK's own `tool-*` chunks, so a Cephable tool call renders
+ * through `<Tool>` with no translation layer at all.
  *
- * Parts arrive in the order the agent produced them, which means the UI reads as a transcript of what
- * actually happened rather than a summary written afterwards.
+ * What is left to write is the genuinely Cephable-specific part: the local-runtime header, and the two
+ * tools whose output is UI rather than data.
  */
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
+import { Cpu, FileText, GitCommitVertical, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
-import type { CephableUIMessage } from '../app/api/chat/route.ts';
-import { SUGGESTED_PROMPTS } from '../lib/tools.ts';
+import {
+    Conversation,
+    ConversationContent,
+    ConversationEmptyState,
+    ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import {
+    PromptInput,
+    PromptInputBody,
+    PromptInputFooter,
+    PromptInputSubmit,
+    PromptInputTextarea,
+    type PromptInputMessage,
+} from '@/components/ai-elements/prompt-input';
+import { Task, TaskItem, TaskTrigger, TaskContent } from '@/components/ai-elements/task';
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import type { CephableUIMessage } from '@/app/api/chat/route';
+import { SUGGESTED_PROMPTS } from '@/lib/tools';
 
 export function Chat() {
-    const [input, setInput] = useState('');
     const { messages, sendMessage, status, error, stop } = useChat<CephableUIMessage>({
         transport: new DefaultChatTransport({ api: '/api/chat' }),
     });
@@ -29,104 +50,125 @@ export function Chat() {
         const trimmed = text.trim();
         if (!trimmed || running) return;
         void sendMessage({ text: trimmed });
-        setInput('');
     }
 
     return (
-        <div className="chat">
-            <div className="transcript">
-                {messages.length === 0 && (
-                    <div className="empty">
-                        <h2>On-device incident review</h2>
-                        <p>
-                            The agent runs on this machine, inside Cephable. Its tools are this app&apos;s own
-                            functions — incident queries, an SLO check, and two that draw straight into this
-                            page. Nothing leaves the device.
-                        </p>
-                        <div className="suggestions">
-                            {SUGGESTED_PROMPTS.map((prompt) => (
-                                <button key={prompt} onClick={() => submit(prompt)} type="button">
-                                    {prompt}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+        <div className="flex h-[calc(100vh-11rem)] flex-col gap-4">
+            <Conversation className="min-h-0 flex-1">
+                <ConversationContent>
+                    {messages.length === 0 && (
+                        <ConversationEmptyState
+                            icon={<ShieldCheck className="size-5" />}
+                            title="On-device incident review"
+                            description="The agent runs on this machine, inside Cephable. Its tools are this app's own functions — and two of them draw straight into this page. Nothing leaves the device."
+                        >
+                            <div className="mt-4 flex w-full max-w-xl flex-col gap-2">
+                                {SUGGESTED_PROMPTS.map((prompt) => (
+                                    <Button
+                                        key={prompt}
+                                        // Explicitly not a submit button: shadcn's Button leaves `type`
+                                        // unset, which the browser treats as submit, so dropping this
+                                        // into any surrounding form would reload the page.
+                                        type="button"
+                                        variant="outline"
+                                        className="h-auto w-full justify-start whitespace-normal py-2 text-left text-sm"
+                                        onClick={() => submit(prompt)}
+                                    >
+                                        {prompt}
+                                    </Button>
+                                ))}
+                            </div>
+                        </ConversationEmptyState>
+                    )}
 
-                {messages.map((message) => (
-                    <article key={message.id} className={`message ${message.role}`}>
-                        <div className="who">{message.role === 'user' ? 'You' : 'Cephable'}</div>
-                        <div className="parts">
-                            {message.parts.map((part, index) => (
-                                <Part key={`${message.id}-${index}`} part={part} />
-                            ))}
-                        </div>
-                    </article>
-                ))}
+                    {messages.map((message) => (
+                        <Message from={message.role} key={message.id}>
+                            <MessageContent>
+                                {message.parts.map((part, index) => (
+                                    <Part key={`${message.id}-${index}`} part={part} />
+                                ))}
+                            </MessageContent>
+                        </Message>
+                    ))}
+                </ConversationContent>
+                <ConversationScrollButton />
+            </Conversation>
 
-                {running && <div className="working">the agent is working…</div>}
-                {error && <div className="notice error">{error.message}</div>}
-            </div>
+            {error && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
+                    {error.message}
+                </div>
+            )}
 
-            <form
-                className="composer"
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    submit(input);
-                }}
+            <PromptInput
+                onSubmit={(message: PromptInputMessage) => submit(message.text)}
+                className="shrink-0"
             >
-                <input
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    placeholder={running ? 'Waiting for the agent…' : 'Ask about the incidents…'}
-                    disabled={running}
-                    aria-label="Message"
-                />
-                {running ? (
-                    <button type="button" onClick={() => stop()}>
-                        Stop
-                    </button>
-                ) : (
-                    <button type="submit" disabled={!input.trim()}>
-                        Send
-                    </button>
-                )}
-            </form>
+                <PromptInputBody>
+                    <PromptInputTextarea
+                        placeholder={running ? 'Waiting for the agent…' : 'Ask about the incidents…'}
+                        disabled={running}
+                    />
+                </PromptInputBody>
+                <PromptInputFooter>
+                    <span className="pl-1 text-muted-foreground text-xs">
+                        Runs on this machine. No prompt leaves the device.
+                    </span>
+                    <PromptInputSubmit status={status} onStop={stop} />
+                </PromptInputFooter>
+            </PromptInput>
         </div>
     );
 }
 
-/** One message part. The `data-*` cases are this app's own; `text` is the agent's answer. */
+/**
+ * One message part.
+ *
+ * `dynamic-tool` is the SDK's own tool part, so it goes straight into AI Elements' `<Tool>`. The
+ * `data-*` cases are this app's.
+ */
 function Part({ part }: { part: CephableUIMessage['parts'][number] }) {
     switch (part.type) {
         case 'text':
-            return <div className="text">{part.text}</div>;
+            // Streamdown-backed markdown, so the agent's lists and emphasis render properly.
+            return <MessageResponse>{part.text}</MessageResponse>;
+
+        case 'dynamic-tool':
+            return (
+                <Tool defaultOpen={part.state === 'output-error'}>
+                    <ToolHeader type="dynamic-tool" toolName={part.toolName} state={part.state} />
+                    <ToolContent>
+                        <ToolInput input={part.input} />
+                        <ToolOutput output={part.output} errorText={part.errorText} />
+                    </ToolContent>
+                </Tool>
+            );
 
         case 'data-run-started':
             return (
-                <div className="run-header">
-                    <span className="badge">on-device</span>
-                    <span>{part.data.model ?? 'unknown model'}</span>
-                    <span className={part.data.cpuFallback ? 'warn' : ''}>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge variant="secondary" className="gap-1">
+                        <Cpu className="size-3" />
+                        on-device
+                    </Badge>
+                    <span className="font-mono text-muted-foreground">
+                        {part.data.model ?? 'unknown model'}
+                    </span>
+                    <span
+                        className={
+                            part.data.cpuFallback
+                                ? 'font-mono text-destructive'
+                                : 'font-mono text-muted-foreground'
+                        }
+                    >
                         {part.data.accelerator ?? '?'}
                         {part.data.cpuFallback ? ' (CPU fallback)' : ''}
                     </span>
-                    {part.data.contextSize && <span>{part.data.contextSize.toLocaleString()} ctx</span>}
-                </div>
-            );
-
-        case 'data-tool-call':
-            return (
-                <div className="tool-call">
-                    <code>{part.data.name}</code>
-                    <span className="args">{renderArgs(part.data.args)}</span>
-                </div>
-            );
-
-        case 'data-tool-result':
-            return (
-                <div className={`tool-result ${part.data.failed ? 'failed' : ''}`}>
-                    {part.data.failed ? '✗' : '✓'} {part.data.summary}
+                    {part.data.contextSize && (
+                        <span className="font-mono text-muted-foreground">
+                            {part.data.contextSize.toLocaleString()} ctx
+                        </span>
+                    )}
                 </div>
             );
 
@@ -134,27 +176,31 @@ function Part({ part }: { part: CephableUIMessage['parts'][number] }) {
             return <Timeline incidents={part.data.incidents} />;
 
         case 'data-draft':
-            return <Draft title={part.data.title} body={part.data.body} />;
+            return <Draft body={part.data.body} title={part.data.title} />;
 
         case 'data-steps':
             return (
-                <details className="steps">
-                    <summary>{part.data.steps.length} agent steps</summary>
-                    <ol>
+                <Task className="w-full" defaultOpen={false}>
+                    <TaskTrigger title={`${part.data.steps.length} agent steps`} />
+                    <TaskContent>
                         {part.data.steps.map((step) => (
-                            <li key={step.index} className={step.status}>
-                                {step.title}
-                                {step.toolName && <code>{step.toolName}</code>}
-                            </li>
+                            <TaskItem key={step.index}>
+                                <span className={step.status === 'failed' ? 'text-destructive' : ''}>
+                                    {step.title}
+                                </span>
+                                {step.toolName && (
+                                    <span className="ml-2 font-mono text-xs opacity-70">{step.toolName}</span>
+                                )}
+                            </TaskItem>
                         ))}
-                    </ol>
-                </details>
+                    </TaskContent>
+                </Task>
             );
 
         case 'data-run-finished':
             return (
-                <div className="run-footer">
-                    <span className={part.data.status === 'completed' ? '' : 'warn'}>
+                <div className="flex flex-wrap items-center gap-3 font-mono text-muted-foreground text-xs">
+                    <span className={part.data.status === 'completed' ? '' : 'text-destructive'}>
                         {part.data.status}
                         {part.data.errorCode ? ` (${part.data.errorCode})` : ''}
                     </span>
@@ -165,71 +211,97 @@ function Part({ part }: { part: CephableUIMessage['parts'][number] }) {
             );
 
         case 'data-notice':
-            return <div className={`notice ${part.data.level}`}>{part.data.message}</div>;
+            return (
+                <div
+                    className={
+                        part.data.level === 'error'
+                            ? 'rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm'
+                            : 'rounded-lg bg-muted px-3 py-2 text-sm'
+                    }
+                >
+                    {part.data.message}
+                </div>
+            );
 
         default:
             return null;
     }
 }
 
-/** One of the two "the agent drew this" tools. */
+/** The payload of `render_timeline` — a tool whose output is UI rather than data. */
 function Timeline({ incidents }: { incidents: Array<Record<string, any>> }) {
     return (
-        <div className="timeline">
-            <div className="timeline-title">Timeline</div>
-            {incidents.map((incident) => (
-                <div key={String(incident.id)} className={`event ${incident.severity}`}>
-                    <div className="when">{formatTime(String(incident.openedAt))}</div>
-                    <div className="what">
-                        <strong>
-                            {String(incident.id)} · {String(incident.title)}
-                        </strong>
-                        <div className="meta">
-                            {String(incident.service)} · {String(incident.severity)} ·{' '}
-                            {incident.resolvedAt
-                                ? `resolved ${formatTime(String(incident.resolvedAt))}`
-                                : 'still open'}
+        <div className="w-full rounded-lg border bg-card p-3">
+            <div className="mb-2 flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wide">
+                <GitCommitVertical className="size-3.5" />
+                Timeline
+            </div>
+            <ol className="divide-y">
+                {incidents.map((incident) => (
+                    <li className="grid gap-1 py-2 sm:grid-cols-[10rem_1fr] sm:gap-3" key={String(incident.id)}>
+                        <span className="font-mono text-muted-foreground text-xs">
+                            {formatTime(String(incident.openedAt))}
+                        </span>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium text-sm">
+                                    {String(incident.id)} · {String(incident.title)}
+                                </span>
+                                <Badge
+                                    variant={incident.severity === 'sev1' ? 'destructive' : 'secondary'}
+                                    className="text-[10px]"
+                                >
+                                    {String(incident.severity)}
+                                </Badge>
+                            </div>
+                            <div className="text-muted-foreground text-xs">
+                                {String(incident.service)} ·{' '}
+                                {incident.resolvedAt
+                                    ? `resolved ${formatTime(String(incident.resolvedAt))}`
+                                    : 'still open'}
+                            </div>
+                            {incident.rootCause && (
+                                <p className="mt-1 text-sm">{String(incident.rootCause)}</p>
+                            )}
                         </div>
-                        {incident.rootCause && <div className="cause">{String(incident.rootCause)}</div>}
-                    </div>
-                </div>
-            ))}
+                    </li>
+                ))}
+            </ol>
         </div>
     );
 }
 
+/** The payload of `draft_status_post`. */
 function Draft({ title, body }: { title: string; body: string }) {
     const [copied, setCopied] = useState(false);
     return (
-        <div className="draft">
-            <div className="draft-head">
-                <strong>{title}</strong>
-                <button
-                    type="button"
+        <div className="w-full rounded-lg border border-primary/40 bg-card p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 font-medium text-sm">
+                    <FileText className="size-3.5" />
+                    {title}
+                </span>
+                <Button
                     onClick={() => {
                         void navigator.clipboard.writeText(`${title}\n\n${body}`).then(() => {
                             setCopied(true);
                             setTimeout(() => setCopied(false), 1500);
                         });
                     }}
+                    size="sm"
+                    variant="secondary"
                 >
                     {copied ? 'Copied' : 'Copy'}
-                </button>
+                </Button>
             </div>
-            <p>{body}</p>
+            <p className="whitespace-pre-wrap text-sm">{body}</p>
         </div>
     );
 }
 
-function renderArgs(args: Record<string, unknown>): string {
-    const entries = Object.entries(args);
-    if (entries.length === 0) return '()';
-    return `(${entries.map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(', ')})`;
-}
-
 function formatTime(iso: string): string {
     try {
-        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+        return `${new Date(iso).toISOString().replace('T', ' ').slice(0, 16)}Z`;
     } catch {
         return iso;
     }

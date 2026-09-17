@@ -22,7 +22,14 @@ import {
 } from '../../../lib/cephable.ts';
 import { CLIENT_TOOLS, handlerFor, type UiEffect } from '../../../lib/tools.ts';
 
-/** Custom data parts. Typed here, consumed with the same type in the client — see components/Chat.tsx. */
+/**
+ * Custom data parts, for the things the AI SDK has no first-class shape for.
+ *
+ * Tool calls are deliberately *not* here: they go out as the SDK's own `tool-*` chunks, which become
+ * `dynamic-tool` parts on the message and render through AI Elements' `<Tool>` component with no
+ * translation. Only what is genuinely Cephable-specific — the local runtime header, the two UI-effect
+ * payloads, the agent's own step list, and the run footer — needs a custom part.
+ */
 export type CephableDataParts = {
     'run-started': {
         requestId: string;
@@ -32,8 +39,6 @@ export type CephableDataParts = {
         contextSize: number | null;
         appVersion: string;
     };
-    'tool-call': { callId: string; name: string; args: Record<string, unknown> };
-    'tool-result': { callId: string; name: string; summary: string; failed: boolean };
     'timeline': { incidents: Array<Record<string, unknown>> };
     'draft': { title: string; body: string };
     'steps': { steps: CephableStep[] };
@@ -69,6 +74,11 @@ export async function POST(request: Request) {
             const textId = 'answer';
             let record: CephableRunRecord;
 
+            // `start` and `finish` are written by hand: as of ai v7 `createUIMessageStream` no longer
+            // injects them, and without a `start` the client never opens an assistant message — so
+            // every part below would stream correctly and render nowhere.
+            writer.write({ type: 'start' });
+
             // Gate on readiness rather than firing into a 409. The inference slot is shared with the
             // person using the Cephable app, so "busy" is a normal state, not an error.
             try {
@@ -91,6 +101,7 @@ export async function POST(request: Request) {
                     type: 'data-notice',
                     data: { level: 'error', message: describe(error) },
                 });
+                writer.write({ type: 'finish' });
                 return;
             }
 
@@ -109,16 +120,22 @@ export async function POST(request: Request) {
                                 message: `The agent asked for tools ${MAX_TOOL_ROUNDS} times without settling. Run cancelled.`,
                             },
                         });
+                        writer.write({ type: 'finish' });
                         return;
                     }
 
                     const results: Array<{ id: string; result?: unknown; error?: string }> = [];
 
                     for (const call of record.toolCalls ?? []) {
+                        // The SDK's own tool chunks, marked `dynamic` because these tools are declared
+                        // per run rather than in a static ToolSet. They arrive on the message as a
+                        // `dynamic-tool` part that AI Elements' <Tool> renders directly.
                         writer.write({
-                            type: 'data-tool-call',
-                            id: call.id,
-                            data: { callId: call.id, name: call.name, args: call.arguments ?? {} },
+                            type: 'tool-input-available',
+                            toolCallId: call.id,
+                            toolName: call.name,
+                            input: call.arguments ?? {},
+                            dynamic: true,
                         });
 
                         // UI tools queue an effect rather than returning it, so the browser gets the
@@ -127,11 +144,13 @@ export async function POST(request: Request) {
                         const handler = handlerFor(call.name);
 
                         if (!handler) {
-                            results.push({ id: call.id, error: `No handler is registered for ${call.name}` });
+                            const message = `No handler is registered for ${call.name}`;
+                            results.push({ id: call.id, error: message });
                             writer.write({
-                                type: 'data-tool-result',
-                                id: `${call.id}-result`,
-                                data: { callId: call.id, name: call.name, summary: 'no such tool', failed: true },
+                                type: 'tool-output-error',
+                                toolCallId: call.id,
+                                errorText: message,
+                                dynamic: true,
                             });
                             continue;
                         }
@@ -157,14 +176,10 @@ export async function POST(request: Request) {
                             }
 
                             writer.write({
-                                type: 'data-tool-result',
-                                id: `${call.id}-result`,
-                                data: {
-                                    callId: call.id,
-                                    name: call.name,
-                                    summary: summarize(output),
-                                    failed: false,
-                                },
+                                type: 'tool-output-available',
+                                toolCallId: call.id,
+                                output,
+                                dynamic: true,
                             });
                         } catch (error) {
                             // Reported to the agent as a failed tool call, not thrown. It then adapts
@@ -172,9 +187,10 @@ export async function POST(request: Request) {
                             const message = error instanceof Error ? error.message : String(error);
                             results.push({ id: call.id, error: message });
                             writer.write({
-                                type: 'data-tool-result',
-                                id: `${call.id}-result`,
-                                data: { callId: call.id, name: call.name, summary: message, failed: true },
+                                type: 'tool-output-error',
+                                toolCallId: call.id,
+                                errorText: message,
+                                dynamic: true,
                             });
                         }
                     }
@@ -209,6 +225,8 @@ export async function POST(request: Request) {
                 await cancelRun(true).catch(() => {});
                 writer.write({ type: 'data-notice', data: { level: 'error', message: describe(error) } });
             }
+
+            writer.write({ type: 'finish' });
         },
         onError: (error) => describe(error),
     });
