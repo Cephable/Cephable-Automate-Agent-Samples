@@ -93,6 +93,8 @@ Five minutes, and the last beat is the one that sells it.
    no API keys."
 2. **Screenshot a real error dialog** — ideally something ugly and technical from the machine you are
    demoing on. Paste it. The OCR text appears. "Windows just read that. On the NPU."
+   (No OCR on your machine? Copy some text instead - Ctrl+V takes text, a screenshot, or a dropped
+   `.txt`/`.md` file, and the rest of the demo is identical.)
 3. **Ask:** *"What is this telling me, and what should I try first?"*
 4. **Narrate the tool calls as they appear.** `read_screen_text` → `summarize_locally` → `save_note`.
    Point out the middle one: **"the agent decided to hand the long text to Windows' summarizer rather
@@ -195,9 +197,19 @@ a sample. Two consequences:
 
 - The file picker needs a window handle passed by hand (`InitializeWithWindow.Initialize`) — see
   `OnOpenClicked`.
-- Some Windows AI features want package identity depending on the Windows build. If Phi Silica reports
-  unavailable on a machine you believe should have it, packaging the app (`EnableMsixTooling` is already
-  on) is the first thing to try.
+- **Windows AI will refuse an unpackaged app.** `LanguageModel.GetReadyState()` and
+  `TextRecognizer.GetReadyState()` throw `UnauthorizedAccessException` rather than returning a state,
+  because Windows AI requires the `systemAIModels` capability, which can only be declared in an appx
+  manifest. An unpackaged build has no way to declare it. This is *not* a hardware problem — it happens
+  on a Copilot+ PC with a working NPU.
+
+  Microsoft's own guidance is to add the capability and package the app. Be aware that even packaged
+  apps are currently reported broken on some Windows builds
+  ([WindowsAppSDK #5580](https://github.com/microsoft/WindowsAppSDK/issues/5580) - `COMException:
+  "Not declared by app"` on 26200), so packaging may not be enough yet depending on your build.
+
+  Nothing else in this sample depends on it. The Cephable half - which is the point of the sample -
+  works either way, and the app accepts text directly so you are never blocked on OCR.
 
 ---
 
@@ -208,7 +220,8 @@ a sample. Two consequences:
 | "CEPHABLE_AUTOMATE_KEY is not set" | Set it in the same shell you run from — `$env:` vars do not cross shells. |
 | "No Cephable server answered on 127.0.0.1:4317-4328" | Cephable is not running, or the extension is off. |
 | "Cephable is busy with another run" | One inference slot, shared with the app's own panel. |
-| "Phi Silica is not available on this device" | No NPU, an older Windows build, or it needs package identity. The app still works — the agent routes around it. |
+| "Phi Silica / Windows OCR refused this app" | Expected for an unpackaged build - see [Unpackaged, and what that costs](#unpackaged-and-what-that-costs). Not a hardware fault. Paste text instead; everything else works. |
+| "Phi Silica is not supported on this device" | Genuinely no NPU or too old a Windows build. The agent routes around it. |
 | "Phi Silica needs to download its model first" | First use downloads it. `EnsureReadyAsync` is called automatically and can take minutes. |
 | "Windows declined to summarize this text" | Content moderation. Normal, not a bug. |
 | Build error about a missing targeting pack | `dotnet build -r win-x64` — the RID is required for WinUI. |

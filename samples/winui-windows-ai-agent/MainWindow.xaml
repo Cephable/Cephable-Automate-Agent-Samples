@@ -8,6 +8,9 @@
     Title="Cephable Desk">
 
     <Grid AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="V" Modifiers="Control" Invoked="OnPasteAccelerator" />
+        </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -114,10 +117,10 @@
                         Background="{ThemeResource AccentWindowsBrush}"
                         VerticalAlignment="Stretch" />
                     <StackPanel Grid.Column="1" Spacing="3">
-                        <TextBlock Text="PASTED DOCUMENT · WINDOWS OCR" Style="{StaticResource SectionLabelStyle}" />
+                        <TextBlock x:Name="SourceLabel" Text="DOCUMENT" Style="{StaticResource SectionLabelStyle}" />
                         <TextBlock
                             x:Name="ScreenTextPreview"
-                            Text="Press Ctrl+V, or drop a PNG anywhere on this window."
+                            Text="Press Ctrl+V to paste text or a screenshot, or drop a .txt, .md or image file anywhere on this window."
                             TextWrapping="Wrap"
                             MaxLines="3"
                             TextTrimming="CharacterEllipsis"

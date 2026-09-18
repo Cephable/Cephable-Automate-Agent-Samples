@@ -2,10 +2,12 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CephableDesk.Services;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -81,16 +83,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
 
-        // AppWindow.Resize is in physical pixels, so a fixed number would come out small on a 150%
-        // display and huge on a 4K one. RasterizationScale is only there once the tree is loaded.
-        if (Content is FrameworkElement root)
-        {
-            root.Loaded += (_, _) =>
-            {
-                double scale = root.XamlRoot?.RasterizationScale ?? 1.0;
-                AppWindow.Resize(new SizeInt32((int)(1180 * scale), (int)(820 * scale)));
-            };
-        }
+        SizeToDisplay();
 
         Transcript.ItemsSource = _transcript;
         NotesList.ItemsSource = _tools.Notes;
@@ -110,6 +103,20 @@ public sealed partial class MainWindow : Window
         };
 
         _ = InitializeAsync();
+    }
+
+    /// <summary>
+    /// Open at a readable size on any display. <c>AppWindow.Resize</c> takes physical pixels, so a
+    /// fixed 1180x820 is cramped at 150% scale and a postage stamp on a 4K panel. Sizing from the
+    /// work area sidesteps the scale factor entirely, because both numbers are already physical -
+    /// and unlike the DPI, the work area is correct before the window is ever shown.
+    /// </summary>
+    private void SizeToDisplay()
+    {
+        DisplayArea display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+        AppWindow.Resize(new SizeInt32(
+            Math.Max(900, (int)(display.WorkArea.Width * 0.62)),
+            Math.Max(640, (int)(display.WorkArea.Height * 0.80))));
     }
 
     // -- startup -------------------------------------------------------------
@@ -163,12 +170,34 @@ public sealed partial class MainWindow : Window
 
     // -- pasting an image ----------------------------------------------------
 
+    /// <summary>
+    /// Ctrl+V anywhere loads a document â€” except while the prompt box has focus, where the user
+    /// plainly means to paste into the box. A window-scoped accelerator fires before the TextBox
+    /// sees the key, so it has to decline explicitly.
+    /// </summary>
+    private void OnPasteAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (FocusManager.GetFocusedElement(Content.XamlRoot) == PromptBox) return;
+        args.Handled = true;
+        OnPasteClicked(sender, new RoutedEventArgs());
+    }
+
     private async void OnPasteClicked(object sender, RoutedEventArgs e)
     {
         DataPackageView clipboard = Clipboard.GetContent();
+
+        // Text first, and not just as a fallback: it needs no AI feature at all, so the Cephable half
+        // of this sample works on every machine even when Windows AI refuses. An image-only entry
+        // point made the whole app dead-end on any build where OCR is unavailable.
+        if (clipboard.Contains(StandardDataFormats.Text))
+        {
+            UseText(await clipboard.GetTextAsync(), "clipboard text");
+            return;
+        }
+
         if (!clipboard.Contains(StandardDataFormats.Bitmap))
         {
-            Add("app", "The clipboard does not contain an image. Copy a screenshot first (Win+Shift+S).");
+            Add("app", "The clipboard has no text or image. Copy some text, or a screenshot (Win+Shift+S).");
             return;
         }
 
@@ -196,17 +225,17 @@ public sealed partial class MainWindow : Window
 
     private async void OnOpenClicked(object sender, RoutedEventArgs e)
     {
-        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
-        picker.FileTypeFilter.Add(".png");
-        picker.FileTypeFilter.Add(".jpg");
-        picker.FileTypeFilter.Add(".jpeg");
-        picker.FileTypeFilter.Add(".bmp");
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+        foreach (string extension in new[] { ".txt", ".md", ".json", ".csv", ".log", ".png", ".jpg", ".jpeg", ".bmp" })
+        {
+            picker.FileTypeFilter.Add(extension);
+        }
 
         // An unpackaged WinUI app has to hand the picker a window handle itself.
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
 
         StorageFile? file = await picker.PickSingleFileAsync();
-        if (file is not null) await ReadImageAsync(file.Path);
+        if (file is not null) await LoadFileAsync(file.Path);
     }
 
     private void OnDragOver(object sender, DragEventArgs e) => e.AcceptedOperation = DataPackageOperation.Copy;
@@ -215,7 +244,27 @@ public sealed partial class MainWindow : Window
     {
         if (!e.DataView.Contains(StandardDataFormats.StorageItems)) return;
         var items = await e.DataView.GetStorageItemsAsync();
-        if (items.Count > 0 && items[0] is StorageFile file) await ReadImageAsync(file.Path);
+        if (items.Count > 0 && items[0] is StorageFile file) await LoadFileAsync(file.Path);
+    }
+
+    private static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".gif" };
+
+    private async Task LoadFileAsync(string path)
+    {
+        if (!ImageExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                UseText(await File.ReadAllTextAsync(path), Path.GetFileName(path));
+            }
+            catch (Exception error)
+            {
+                Add("app", $"Could not read {Path.GetFileName(path)}: {error.Message}");
+            }
+            return;
+        }
+
+        await ReadImageAsync(path);
     }
 
     private async Task ReadImageAsync(string path)
@@ -224,6 +273,8 @@ public sealed partial class MainWindow : Window
         if (!ocr.Ready)
         {
             Add("windows ocr", ocr.Detail);
+            Add("app", "Nothing else here depends on OCR. Copy the text itself, or drop a .txt or .md "
+                     + "file, and the Cephable agent works exactly the same.");
             return;
         }
 
@@ -231,14 +282,28 @@ public sealed partial class MainWindow : Window
         try
         {
             string text = await Task.Run(() => _windowsAi.ReadTextFromImageAsync(path));
-            _tools.ScreenText = text;
-            ScreenTextPreview.Text = text;
-            Add("windows ocr", $"Read {text.Length} characters. The agent can now use read_screen_text.");
+            UseText(text, "Windows OCR");
         }
         catch (Exception error)
         {
             Add("windows ocr", error.Message);
         }
+    }
+
+    /// <summary>Hand a document to the agent, whatever produced it.</summary>
+    private void UseText(string text, string source)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            Add("app", $"{source} had no text in it.");
+            return;
+        }
+
+        _tools.ScreenText = text;
+        ScreenTextPreview.Text = text;
+        SourceLabel.Text = $"DOCUMENT Â· {source.ToUpperInvariant()}";
+        Add("app", $"Loaded {text.Length:N0} characters from {source}. "
+                 + "The agent can now use read_screen_text.");
     }
 
     // -- running the agent ---------------------------------------------------
@@ -398,3 +463,4 @@ public sealed partial class MainWindow : Window
         _ => $"{error.GetType().Name}: {error.Message}",
     };
 }
+

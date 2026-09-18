@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.Graphics.Imaging;
 using Microsoft.Windows.AI;
@@ -43,9 +44,7 @@ public sealed class WindowsAiService : IDisposable
         }
         catch (Exception error)
         {
-            // A machine or Windows build without the feature at all throws rather than returning a
-            // state. Treat that as "not available here" instead of failing the app.
-            return new Availability(false, $"Phi Silica is not available on this device ({error.GetType().Name}).");
+            return Explain(error, "Phi Silica");
         }
     }
 
@@ -57,9 +56,24 @@ public sealed class WindowsAiService : IDisposable
         }
         catch (Exception error)
         {
-            return new Availability(false, $"Windows OCR is not available on this device ({error.GetType().Name}).");
+            return Explain(error, "Windows OCR");
         }
     }
+
+    /// <summary>
+    /// <c>GetReadyState</c> throws rather than returning a state when the app is not permitted to ask
+    /// at all. That is not the same as the device being incapable, and saying so sends people off
+    /// checking hardware they already have. Windows AI requires the <c>systemAIModels</c> capability
+    /// in an appx manifest, which an unpackaged app has no way to declare — see the README.
+    /// </summary>
+    private static Availability Explain(Exception error, string feature) => error switch
+    {
+        UnauthorizedAccessException or COMException =>
+            new Availability(false,
+                $"{feature} refused this app, which is expected for an unpackaged build: Windows AI "
+                + "requires the systemAIModels capability. Not a hardware problem. See the README."),
+        _ => new Availability(false, $"{feature} is unavailable ({error.GetType().Name}: {error.Message})"),
+    };
 
     private static Availability Describe(AIFeatureReadyState state, string feature) => state switch
     {
