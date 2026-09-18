@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="CephableDesk.app" />
+
+  <!--
+    Connects this exe to the identity package in packaging\, which is what lets Windows AI grant it
+    the systemAIModels capability. Harmless when that package is not registered - the app simply
+    runs unpackaged, as it does by default. These three values must match AppxManifest.xml exactly
+    (Identity/@Name, Identity/@Publisher, Application/@Id) or the exe gets no identity and Windows
+    AI keeps refusing, with no error to say why.
+  -->
+  <msix xmlns="urn:schemas-microsoft-com:msix.v1"
+        publisher="CN=Cephable Desk Sample Dev"
+        packageName="Cephable.CephableDeskSample"
+        applicationId="CephableDesk" />
+
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <!-- Per-monitor DPI, so the OCR'd screenshot and the text stay crisp on mixed-DPI setups. -->

@@ -197,19 +197,52 @@ a sample. Two consequences:
 
 - The file picker needs a window handle passed by hand (`InitializeWithWindow.Initialize`) — see
   `OnOpenClicked`.
-- **Windows AI will refuse an unpackaged app.** `LanguageModel.GetReadyState()` and
-  `TextRecognizer.GetReadyState()` throw `UnauthorizedAccessException` rather than returning a state,
-  because Windows AI requires the `systemAIModels` capability, which can only be declared in an appx
-  manifest. An unpackaged build has no way to declare it. This is *not* a hardware problem — it happens
-  on a Copilot+ PC with a working NPU.
+- **Windows AI will refuse an unpackaged app, and you fix that with identity, not packaging.**
+  `LanguageModel.GetReadyState()` and `TextRecognizer.GetReadyState()` throw
+  `UnauthorizedAccessException` rather than returning a state, because Windows AI is gated on the
+  `systemAIModels` capability - and capabilities are granted to a *package identity*, which an
+  unpackaged Win32 process does not have. There is no setting to flip, because there is no package
+  for a setting to apply to. It is not a hardware problem: it happens on a Copilot+ PC with a
+  working NPU.
 
-  Microsoft's own guidance is to add the capability and package the app. Be aware that even packaged
-  apps are currently reported broken on some Windows builds
-  ([WindowsAppSDK #5580](https://github.com/microsoft/WindowsAppSDK/issues/5580) - `COMException:
-  "Not declared by app"` on 26200), so packaging may not be enough yet depending on your build.
+  You do **not** have to convert this into a packaged app. An *identity package* (also called a
+  sparse package, or packaging with external location) is a manifest-only MSIX with no payload that
+  points at your existing `bin\` directory. `dotnet build`, F5 and running the loose `.exe` all keep
+  working. See [Turning Windows AI on](#turning-windows-ai-on) below.
 
-  Nothing else in this sample depends on it. The Cephable half - which is the point of the sample -
-  works either way, and the app accepts text directly so you are never blocked on OCR.
+### Turning Windows AI on
+
+```powershell
+.\packaging\enable-windows-ai.ps1
+```
+
+Then relaunch the app; the Phi Silica and Windows OCR pills should read **on device**.
+
+What the script does, and what it changes on your machine - both reversible:
+
+1. Creates a self-signed code-signing certificate (`CN=Cephable Desk Sample Dev`) in your per-user
+   store and copies its public half into Trusted People, because Windows will not register a package
+   whose signer it does not trust. Per-user, no elevation, nothing trusted machine-wide.
+2. Packs [`packaging/identity/AppxManifest.xml`](packaging/identity/AppxManifest.xml) into a
+   manifest-only MSIX, signs it, and registers it with `-ExternalLocation` pointing at your build
+   output. The package is hidden from the Start menu and installed-apps list.
+
+Undo all of it:
+
+```powershell
+.\packaging\enable-windows-ai.ps1 -Remove
+```
+
+The identity is bound to one output directory, so re-run it after switching configuration or
+architecture. Three values have to match between `packaging/identity/AppxManifest.xml` and the
+`<msix>` element in `app.manifest` - package name, publisher, application id - or the exe silently
+gets no identity and Windows AI keeps refusing with nothing to say why.
+
+**It may still not work on some Windows builds.** [WindowsAppSDK #5580](https://github.com/microsoft/WindowsAppSDK/issues/5580)
+reports `COMException: "Not declared by app"` for fully packaged apps with the capability correctly
+declared on build 26200. If you hit that, it is upstream, not this sample. Nothing else here depends
+on Windows AI - the Cephable half, which is the point of the sample, works either way, and the app
+takes text directly so you are never blocked on OCR.
 
 ---
 
@@ -220,7 +253,7 @@ a sample. Two consequences:
 | "CEPHABLE_AUTOMATE_KEY is not set" | Set it in the same shell you run from — `$env:` vars do not cross shells. |
 | "No Cephable server answered on 127.0.0.1:4317-4328" | Cephable is not running, or the extension is off. |
 | "Cephable is busy with another run" | One inference slot, shared with the app's own panel. |
-| "Phi Silica / Windows OCR refused this app" | Expected for an unpackaged build - see [Unpackaged, and what that costs](#unpackaged-and-what-that-costs). Not a hardware fault. Paste text instead; everything else works. |
+| "Phi Silica / Windows OCR refused this app" | No package identity. Run `.\packaging\enable-windows-ai.ps1` - see [Turning Windows AI on](#turning-windows-ai-on). Not a hardware fault, and not required for the rest of the sample. |
 | "Phi Silica is not supported on this device" | Genuinely no NPU or too old a Windows build. The agent routes around it. |
 | "Phi Silica needs to download its model first" | First use downloads it. `EnsureReadyAsync` is called automatically and can take minutes. |
 | "Windows declined to summarize this text" | Content moderation. Normal, not a bug. |

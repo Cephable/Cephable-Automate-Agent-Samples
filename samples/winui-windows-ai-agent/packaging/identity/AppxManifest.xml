@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Identity package (a "sparse package") for CephableDesk.
+
+  This is NOT a packaged build of the app. It carries no payload at all - it exists only to give
+  the loose CephableDesk.exe a package identity, because Windows AI capabilities are granted to a
+  package identity and an unpackaged Win32 process has none. Without it,
+  LanguageModel.GetReadyState() and TextRecognizer.GetReadyState() throw UnauthorizedAccessException
+  no matter how capable the hardware is.
+
+  The app keeps building and running exactly as before: `dotnet build`, F5, and launching the .exe
+  from bin\ all still work. Registration just points this manifest at that output directory.
+
+  See packaging/enable-windows-ai.ps1, and the README section "Turning Windows AI on".
+-->
+<Package
+  IgnorableNamespaces="uap uap10 rescap systemai"
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10">
+
+  <!-- Publisher must equal the Subject of the signing certificate, and Name/Publisher must match the
+       <msix> element in app.manifest or the exe gets no identity at runtime. -->
+  <Identity
+    Name="Cephable.CephableDeskSample"
+    Publisher="CN=Cephable Desk Sample Dev"
+    Version="1.0.0.0"
+    ProcessorArchitecture="neutral" />
+
+  <Properties>
+    <DisplayName>Cephable Desk (sample)</DisplayName>
+    <PublisherDisplayName>Cephable</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <!-- What lets the package reference files that live outside it, i.e. your build output. -->
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Dependencies>
+    <!-- MaxVersionTested has to be at least 10.0.26226.0 for the systemAIModels capability to be
+         honored; below that Windows ignores it and the AI calls keep failing. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26226.0" />
+  </Dependencies>
+
+  <Capabilities>
+    <!-- runFullTrust + unvirtualizedResources are the Win32 compatibility pair. -->
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+    <!-- The one that actually unlocks Phi Silica and Windows OCR. -->
+    <systemai:Capability Name="systemAIModels" />
+  </Capabilities>
+
+  <Applications>
+    <!-- AppListEntry="none" keeps this out of the Start menu and the installed-apps list: it is
+         plumbing, not an app. The referenced image paths therefore do not need to resolve. -->
+    <Application
+      Id="CephableDesk"
+      Executable="CephableDesk.exe"
+      uap10:TrustLevel="mediumIL"
+      uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements
+        AppListEntry="none"
+        DisplayName="Cephable Desk (sample)"
+        Description="Identity package for the Cephable Desk sample"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+</Package>
