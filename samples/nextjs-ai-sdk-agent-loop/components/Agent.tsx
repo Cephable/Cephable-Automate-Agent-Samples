@@ -10,11 +10,42 @@
  *     dialog painted after the fact - the server is genuinely suspended.
  */
 import { useChat } from '@ai-sdk/react';
-import { isToolUIPart, getToolName } from 'ai';
+import {
+    DefaultChatTransport,
+    getToolName,
+    isToolUIPart,
+    lastAssistantMessageIsCompleteWithApprovalResponses,
+} from 'ai';
 import { useState } from 'react';
 
+/**
+ * `useChat` posts to `/api/chat` unless you tell it otherwise, so the transport has to name
+ * this sample's route. Getting this wrong returns Next's 404 page into the stream parser,
+ * which is a confusing way to find out.
+ */
+const transport = new DefaultChatTransport({ api: '/api/agent' });
+
+/**
+ * Starters that exercise different paths through the tools: a read, a search, a refund that
+ * should be approved, and one the model should push back on.
+ */
+const SUGGESTIONS = [
+    "Why is A-1043 late, and refund it if it's our fault?",
+    'Which orders are delayed right now?',
+    "What's the story with the Kestrel Design order?",
+    'A-0987 never arrived. Refund it.',
+    'Has Bellweather Foods had any problems?',
+    'Refund A-1102.',
+];
+
 export function Agent() {
-    const { messages, sendMessage, addToolApprovalResponse, status, error } = useChat();
+    const { messages, sendMessage, addToolApprovalResponse, status, error } = useChat({
+        transport,
+        // Answering an approval only records the decision on the client. Something still has to
+        // send it back so the suspended run can continue - without this the tool sits at
+        // `approval-responded` forever and the loop silently never finishes.
+        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    });
     const [input, setInput] = useState('');
     const busy = status === 'submitted' || status === 'streaming';
 
@@ -109,6 +140,21 @@ export function Agent() {
                     </div>
                 ))}
             </div>
+
+            {messages.length === 0 ? (
+                <div className="flex flex-wrap gap-2">
+                    {SUGGESTIONS.map((suggestion) => (
+                        <button
+                            key={suggestion}
+                            type="button"
+                            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                            onClick={() => void sendMessage({ text: suggestion })}
+                        >
+                            {suggestion}
+                        </button>
+                    ))}
+                </div>
+            ) : null}
 
             {error ? (
                 <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">

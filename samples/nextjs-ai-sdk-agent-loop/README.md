@@ -20,7 +20,18 @@ model to decide *when*.
 
 ## What it does
 
-Ask it *"why is A-1043 late, and refund it if it's our fault?"* and:
+The page offers starters that exercise different paths through the tools:
+
+| Prompt | What it exercises |
+|---|---|
+| Why is A-1043 late, and refund it if it's our fault? | read, then a gated refund |
+| Which orders are delayed right now? | `search_orders` by status |
+| What's the story with the Kestrel Design order? | `search_orders` by customer, then a read |
+| A-0987 never arrived. Refund it. | the gate on a different order |
+| Has Bellweather Foods had any problems? | a search that should *not* lead to a refund |
+| Refund A-1102. | a refund the model should question - that order was delivered |
+
+Take the first one:
 
 1. `ToolLoopAgent` sends the question to Cephable.
 2. Cephable asks for `lookup_order`. **Your** Next.js server executes it against
@@ -56,6 +67,10 @@ npm run dev
 
 The `refund` script drives exactly the two tools this sample declares, so you can watch the
 approval gate work before installing anything.
+
+One caveat worth knowing: the fake replays a **fixed script**, so every prompt produces the same
+two tool calls regardless of what you type. The starters above only genuinely diverge against a
+real Cephable install, where an actual model is choosing the tools.
 
 ---
 
@@ -112,8 +127,23 @@ issue_refund: tool({
 ```
 
 The server stops *before* executing and emits a `tool-approval-request`. [`components/Agent.tsx`](components/Agent.tsx)
-renders it and answers with `addToolApprovalResponse({ id, approved })`. The run is genuinely
-suspended in between — this is the same idea as Cephable's own destructive-tool gate
+renders it and answers with `addToolApprovalResponse({ id, approved })`.
+
+Answering only records the decision on the client, though. Something still has to send it back so
+the suspended run can continue, which is what this does:
+
+```ts
+useChat({
+    transport: new DefaultChatTransport({ api: '/api/agent' }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+});
+```
+
+Leave that out and the tool sits at `approval-responded` forever while the loop silently never
+finishes - no error, no output, nothing in the log. The `transport` matters too: `useChat` posts
+to `/api/chat` by default, so pointing it at this sample's route is not optional.
+
+The run is genuinely suspended in between — this is the same idea as Cephable's own destructive-tool gate
 (`delete_path`, `run_command`, `move_path`), except here the policy is yours and applies to your
 tools.
 

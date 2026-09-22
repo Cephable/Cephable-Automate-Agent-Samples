@@ -12,11 +12,9 @@ export default function Page() {
                 </h1>
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">
                     The loop, the tools and the approval policy live in this app. Cephable is the
-                    model behind them, running on this machine. Try{' '}
-                    <em className="not-italic font-semibold text-slate-800">
-                        &ldquo;why is A-1043 late, and refund it if it&rsquo;s our fault&rdquo;
-                    </em>
-                    .
+                    model behind them, running on this machine. Pick a starter below, or ask your
+                    own &mdash; the agent can read the order book, search it, and refund an order
+                    once you approve it.
                 </p>
             </header>
             <Agent />
