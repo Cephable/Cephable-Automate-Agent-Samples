@@ -107,6 +107,23 @@ SCRIPTS: Dict[str, Dict[str, Any]] = {
         ],
     },
     # A run with no caller tools at all, for testing the plain path.
+    # samples/nextjs-ai-sdk-agent-loop - a read, then a tool the sample gates on approval.
+    "refund": {
+        "rounds": [
+            [{"id": "client_tool_r1", "name": "lookup_order",
+              "arguments": {"orderId": "A-1043"}}],
+            [{"id": "client_tool_r2", "name": "issue_refund",
+              "arguments": {"orderId": "A-1043",
+                            "reason": "Carrier delay on an account with two prior late deliveries."}}],
+        ],
+        "answer": "A-1043 is delayed with UPS and the account has two prior late deliveries, so I "
+                  "refunded it in full ($1,840.00). Nothing else on the account needs attention.",
+        "steps": [
+            {"title": "Look up order", "toolName": "lookup_order"},
+            {"title": "Issue refund", "toolName": "issue_refund"},
+            {"title": "Respond to user", "toolName": "respond_to_user"},
+        ],
+    },
     "plain": {
         "rounds": [],
         "answer": "Nothing to do here - this script declares no tool calls.",

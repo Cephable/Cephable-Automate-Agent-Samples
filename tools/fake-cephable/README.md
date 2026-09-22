@@ -47,6 +47,7 @@ exercises the error path. Pick the one matching the sample you are running:
 |---|---|---|
 | `support` *(default)* | [python-langchain-tools](../../samples/python-langchain-tools) | `lookup_order`, `get_policy` |
 | `incidents` | [nextjs-vercel-ai-ui](../../samples/nextjs-vercel-ai-ui) | `list_incidents`, `get_incident`, `render_timeline`, `draft_status_post` |
+| `refund` | [nextjs-ai-sdk-agent-loop](../../samples/nextjs-ai-sdk-agent-loop) | `lookup_order`, `issue_refund` (the second is gated behind approval in that sample) |
 | `plain` | anything | nothing — answers immediately |
 
 The [public-gateway](../../samples/public-gateway) sample works with any script; its own tests use an
