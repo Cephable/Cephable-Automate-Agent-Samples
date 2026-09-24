@@ -60,6 +60,12 @@ contract against a running server. If you are unsure whether a field exists, go 
 # python-langchain-tools
 python -m unittest test_sample -v
 
+# python-langgraph-own-loop (in its venv, so the loop tests run rather than skip)
+python -m unittest test_sample -v
+
+# nextjs-ai-sdk-agent-loop
+npm run typecheck
+
 # public-gateway
 npm run typecheck && npm test
 

@@ -196,6 +196,22 @@ add the gate as middleware.
 
 ---
 
+## What this does not do
+
+- **No Cephable tools.** The model sees your five tools and nothing else — no files, browser, email or app
+  automation. If you want those, you want Cephable's own agent: [python-langchain-tools](../python-langchain-tools).
+- **No persistence.** The conversation lives in LangGraph's in-memory `MemorySaver` and credits in a Python
+  list; both vanish when the script exits. Swap in a durable checkpointer (SQLite, Postgres) for real use.
+- **No concurrency.** One conversation, one request at a time — there is one inference slot on the device.
+  A multi-user app has to queue on its side.
+- **The approval gate is a terminal prompt**, not an audit trail. A real one would record who approved what.
+- **No token-by-token streaming from inside a model call.** Cephable streams the finished answer in chunks;
+  while its hidden loop works, the stream only carries keep-alives.
+- **The fake server does not reason.** Its answers are fixed, so a declined credit still reads as issued
+  against it. Only a real Cephable shows the model adapting.
+
+---
+
 ## Troubleshooting
 
 | | |
