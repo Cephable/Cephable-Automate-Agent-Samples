@@ -351,8 +351,8 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // Cancelling our own task does not stop the run - it keeps going inside Cephable and holds
-            // the slot. Stop it there too.
+            // Dropping the request cancels a run that is still working, but not one parked on our tools,
+            // which keeps the slot until it times out. Stop it explicitly either way.
             await SafeCancelAsync();
             Add("app", "Stopped.");
         }

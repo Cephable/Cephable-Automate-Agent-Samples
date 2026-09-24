@@ -220,8 +220,8 @@ export async function POST(request: Request) {
                     },
                 });
             } catch (error) {
-                // Our request dying does not stop the run — it keeps going inside Cephable and holds
-                // the slot. Cancel it before giving up.
+                // A run parked on our tools keeps the slot after our request dies. Cancel it before
+                // giving up.
                 await cancelRun(true).catch(() => {});
                 writer.write({ type: 'data-notice', data: { level: 'error', message: describe(error) } });
             }

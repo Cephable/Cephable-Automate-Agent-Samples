@@ -10,13 +10,17 @@
  * a browser bundle anyway.
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { simulateStreamingMiddleware, wrapLanguageModel, type LanguageModel } from 'ai';
+import type { LanguageModel } from 'ai';
 
 const DEFAULT_PORT = 4317;
 const PORT_ATTEMPTS = 12;
 
-/** `GET /v1/models` reports exactly one id, and this is it. */
-const MODEL_ID = 'cephable-agent';
+/**
+ * Model mode: Cephable answers as a chat model and leaves the loop to `ToolLoopAgent`. It uses our
+ * instructions and the whole conversation, and offers the model only our tools. (`cephable-agent`
+ * would run Cephable's own desktop agent, with its built-in tools, inside every step.)
+ */
+const MODEL_ID = 'cephable-model';
 
 export class CephableSetupError extends Error {}
 
@@ -79,12 +83,10 @@ export async function resolveEndpoint(): Promise<string> {
 /**
  * The model the agent runs on.
  *
- * Cephable's `/v1/chat/completions` is deliberately non-streaming - a run is a whole agent
- * execution, not a token feed, so it answers once with the finished result. The AI SDK's UI
- * stream helpers call `agent.stream()`, which would otherwise fail with "Response stream ended
- * without a finish reason". `simulateStreamingMiddleware` bridges the two: it presents the
- * single response as a one-chunk stream, so the loop, the UI parts and the approval flow all
- * behave normally. The text simply arrives at once rather than typing itself out.
+ * Cephable streams OpenAI chunks, so `agent.stream()` and the UI stream helpers work as they do
+ * against a hosted provider. Its hidden work inside a step is not token-streamed - the answer
+ * arrives in word-sized chunks once it is ready - but the headers come back at once and a
+ * keep-alive every ten seconds, so a long step never trips Node's 300-second header timeout.
  */
 export async function cephableModel(): Promise<LanguageModel> {
     const endpoint = await resolveEndpoint();
@@ -93,8 +95,5 @@ export async function cephableModel(): Promise<LanguageModel> {
         baseURL: `${endpoint}/v1`,
         apiKey: accessKey(),
     });
-    return wrapLanguageModel({
-        model: cephable(MODEL_ID),
-        middleware: simulateStreamingMiddleware(),
-    });
+    return cephable(MODEL_ID);
 }

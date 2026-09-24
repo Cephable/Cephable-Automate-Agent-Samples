@@ -1,0 +1,92 @@
+{
+  "_comment": "Fake data for the sample. Deliberately small, and deliberately messy in places (a late order, a backordered item, a customer with a prior complaint) so the agent has something real to reason about.",
+  "customers": [
+    {
+      "id": "C-1001",
+      "name": "Dana Whitfield",
+      "email": "dana.whitfield@example.com",
+      "tier": "gold",
+      "since": "2021-04-02",
+      "priorComplaints": 2,
+      "notes": "Escalated twice in 2025 over shipping delays. Values being told the truth early."
+    },
+    {
+      "id": "C-1002",
+      "name": "Marcus Oyelaran",
+      "email": "m.oyelaran@example.com",
+      "tier": "standard",
+      "since": "2026-01-19",
+      "priorComplaints": 0,
+      "notes": "First-time buyer."
+    },
+    {
+      "id": "C-1003",
+      "name": "Priya Raman",
+      "email": "priya.raman@example.com",
+      "tier": "gold",
+      "since": "2019-11-30",
+      "priorComplaints": 0,
+      "notes": "Buys in bulk for a school district. Needs invoices, not receipts."
+    }
+  ],
+  "orders": [
+    {
+      "id": "4471",
+      "customerId": "C-1001",
+      "placedAt": "2026-09-02",
+      "status": "delayed",
+      "promisedBy": "2026-09-09",
+      "shippedAt": null,
+      "total": 248.0,
+      "currency": "USD",
+      "carrier": null,
+      "tracking": null,
+      "items": [
+        { "sku": "SW-200", "name": "Adaptive switch, 2-pack", "quantity": 2, "unitPrice": 89.0 },
+        { "sku": "MT-010", "name": "Universal mounting arm", "quantity": 1, "unitPrice": 70.0 }
+      ],
+      "note": "Held: SW-200 is backordered."
+    },
+    {
+      "id": "4472",
+      "customerId": "C-1002",
+      "placedAt": "2026-09-11",
+      "status": "shipped",
+      "promisedBy": "2026-09-18",
+      "shippedAt": "2026-09-12",
+      "total": 89.0,
+      "currency": "USD",
+      "carrier": "UPS",
+      "tracking": "1Z999AA10123456784",
+      "items": [{ "sku": "SW-200", "name": "Adaptive switch, 2-pack", "quantity": 1, "unitPrice": 89.0 }],
+      "note": null
+    },
+    {
+      "id": "4473",
+      "customerId": "C-1003",
+      "placedAt": "2026-08-20",
+      "status": "delivered",
+      "promisedBy": "2026-08-27",
+      "shippedAt": "2026-08-22",
+      "total": 1780.0,
+      "currency": "USD",
+      "carrier": "FedEx",
+      "tracking": "7712 3456 7890",
+      "items": [
+        { "sku": "SW-200", "name": "Adaptive switch, 2-pack", "quantity": 20, "unitPrice": 89.0 }
+      ],
+      "note": "School district PO 88123."
+    }
+  ],
+  "inventory": [
+    { "sku": "SW-200", "name": "Adaptive switch, 2-pack", "onHand": 0, "restockEta": "2026-09-24", "backordered": true },
+    { "sku": "MT-010", "name": "Universal mounting arm", "onHand": 43, "restockEta": null, "backordered": false },
+    { "sku": "HS-050", "name": "Headset stand", "onHand": 7, "restockEta": null, "backordered": false }
+  ],
+  "policies": {
+    "late_shipment": "If an order passes its promised date, the customer may choose a full refund of shipping or a 15% credit on the order total. Gold-tier customers may take both. Never promise a new delivery date unless the item is in stock.",
+    "backorder": "Backordered items may be cancelled for a full refund at any time before shipment, or split-shipped at no extra cost so in-stock items go out immediately.",
+    "refund_window": "30 days from delivery for any reason. 90 days for a defect.",
+    "escalation": "Any customer with two or more prior complaints goes to a named human owner, not a queue. Say who will follow up."
+  }
+}

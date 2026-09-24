@@ -1,0 +1,7 @@
+langchain-core>=0.3.0,<2.0
+langchain-openai>=0.2.0,<2.0
+langgraph>=0.3.0,<2.0
+
+# Already a transitive dependency of langchain-openai, but named explicitly because run_agent.py installs
+# httpx event hooks to show what each model call sends (see ModelCallLog).
+httpx>=0.27

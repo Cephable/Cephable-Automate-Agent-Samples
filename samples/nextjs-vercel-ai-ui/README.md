@@ -190,8 +190,9 @@ render_timeline: ({ incident_ids }, context) => {
 Cephable app. `waitUntilReady()` waits politely; the error path explains *why* rather than saying
 "failed".
 
-**Cancel on your error path.** If the route throws or the client disconnects, the run keeps going inside
-Cephable and holds the slot. The route calls `cancelRun(true)` before giving up. The loop also has a
+**Cancel on your error path.** A disconnect cancels a run that is still working, but a run parked on our
+tools keeps the slot until it times out. The route calls `cancelRun(true)` before giving up, which covers
+both. The loop also has a
 `MAX_TOOL_ROUNDS` seatbelt, because a model looping on one tool would hold the machine all day.
 
 ### What this sample does *not* do

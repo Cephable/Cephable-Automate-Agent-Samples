@@ -9,8 +9,8 @@ arrangement:
 | | [nextjs-vercel-ai-ui](../nextjs-vercel-ai-ui) | **this sample** |
 |---|---|---|
 | Who runs the loop | Cephable | `ToolLoopAgent` in your route handler |
-| Whose tools run | Cephable's 46 built-ins, plus yours | only yours |
-| What Cephable is | the whole agent | the reasoning model inside your agent |
+| Whose tools run | Cephable's 47 built-ins, plus yours | only yours |
+| What Cephable is | the whole agent (`cephable-agent`) | the model inside your agent (`cephable-model`) |
 | Best when | you want the desktop agent's file, browser and computer-use tools | the tools and the guardrails belong to your product |
 
 Pick this shape when your app already knows what it is allowed to do, and you want an on-device
@@ -83,17 +83,24 @@ real Cephable install, where an actual model is choosing the tools.
 key. It also sweeps ports 4317–4328, because Cephable moves up the range when its preferred port
 is taken and hardcoding 4317 breaks the moment a second instance is running.
 
-**One wrinkle worth knowing about.** Cephable's route is deliberately *non-streaming* — a run is
-a whole agent execution, not a token feed, so it answers once with the finished result. The AI
-SDK's UI stream helpers call `agent.stream()`, which against a non-streaming model fails with
-`Response stream ended without a finish reason`. The fix ships with the SDK:
+The model id is `cephable-model`, which puts Cephable in **model mode**: it answers as a chat
+model — using the agent's `instructions` as its system prompt and the whole conversation as its
+history — and offers the model only the tools declared here. `cephable-agent` would instead run
+Cephable's own desktop agent, with its built-in tools, inside every step of your loop.
 
 ```ts
-wrapLanguageModel({ model: cephable('cephable-agent'), middleware: simulateStreamingMiddleware() })
+const cephable = createOpenAICompatible({ name: 'cephable', baseURL: `${endpoint}/v1`, apiKey });
+return cephable('cephable-model');
 ```
 
-That presents the single response as a one-chunk stream. The loop, the UI parts and the approval
-flow all behave normally; the text simply arrives at once instead of typing itself out.
+It streams OpenAI chunks, so `agent.stream()` and the UI helpers need no adapter. Cephable's work
+inside a step isn't token-streamed — the text arrives in word-sized chunks once it's ready — but
+the response headers come back immediately with a keep-alive every ten seconds, so a long step
+never trips Node's 300-second header timeout.
+
+What model mode still does unseen, inside each step: a message or tool result too long for the
+on-device context window is saved on Cephable's side and read back in full through its own
+summarize and generate tools, and long-form answers are written past a single turn's limit.
 
 ### 2. The loop is eight lines
 

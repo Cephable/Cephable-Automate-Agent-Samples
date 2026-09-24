@@ -110,7 +110,7 @@ public sealed class CephableClient : IDisposable
         _token = token;
         _endpoint = endpoint;
         // No client-wide timeout: agent runs are long, and each call sets its own deadline with a
-        // CancellationToken. A client that gives up does not stop the run - it keeps going in Cephable.
+        // CancellationToken. Giving up mid-run cancels the run; a run parked on our tools needs an explicit cancel.
         _http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _http.DefaultRequestHeaders.Authorization = new("Bearer", token);
     }

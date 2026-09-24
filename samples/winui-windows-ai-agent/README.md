@@ -20,7 +20,7 @@ reasons about it, and saves you a note. Air-gapped, the whole way through.
 Windows' AI APIs are excellent at narrow, fast, well-defined jobs — read this image, tighten this
 paragraph — and they need no prompt, no tools, and no orchestration. What they do not do is *decide*.
 
-Cephable is the other half: an agent loop with ~55 built-in tools, AI Skills, and MCP servers, which can
+Cephable is the other half: an agent loop with 47 built-in tools, AI Skills, and MCP servers, which can
 be handed your app's functions and will work out a sequence. Give it Windows' features as tools and you
 get something neither provides alone, with a privacy story that survives contact with a security review.
 

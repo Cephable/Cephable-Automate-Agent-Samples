@@ -2,7 +2,7 @@
 
 The whole Automate HTTP Server contract on one page. Full reference: [Cephable Developer Docs](https://developers.cephable.com/docs/automate-http-server/api-reference).
 
-**Base URL** `http://127.0.0.1:4317` (sweeps to `4328`) · **Auth** `Authorization: Bearer <key>` on *every* route, `/health` included · **Bodies** JSON, max 1 MiB · **No streaming, no CORS**
+**Base URL** `http://127.0.0.1:4317` (sweeps to `4328`) · **Auth** `Authorization: Bearer <key>` on *every* route, `/health` included · **Bodies** JSON, max 1 MiB · **Streaming** opt-in with `stream: true` (SSE) · **No CORS**
 
 ---
 
@@ -11,17 +11,35 @@ The whole Automate HTTP Server contract on one page. Full reference: [Cephable D
 | Method | Path | Purpose | While busy |
 |---|---|---|---|
 | `GET` | `/health` | Readiness, runtime, device, workspace | ✅ |
-| `GET` | `/v1/models` | OpenAI-shaped list (always `cephable-agent`) | ✅ |
+| `GET` | `/v1/models` | OpenAI-shaped list: `cephable-agent` (assistant) and `cephable-model` (model mode) | ✅ |
 | `GET` | `/v1/automate/models` | The on-device GGUF catalog | ✅ |
 | `POST` | `/v1/automate/models/select` | Pin a model for this app session | ❌ `409` |
+| `GET` | `/v1/automate/tools` | Built-in tool catalog and server policy | ✅ |
+| `PUT` · `DELETE` | `/v1/automate/tools/policy` | Save or clear the server-wide tool policy | ✅ |
 | `POST` | `/v1/automate/cancel` | Stop whatever is running | ✅ |
 | `POST` | `/v1/runs` | Run a task (native) | ❌ `409` |
 | `POST` | `/v1/runs/{resumeToken}/tool-results` | Resume a parked run | ✅ by design |
-| `POST` | `/v1/chat/completions` | Run a task (OpenAI) | ❌ `409`¹ |
+| `POST` | `/v1/chat/completions` | Run a task, or a model-mode turn (OpenAI) | ❌ `409`¹ |
+| `GET` · `PATCH` | `/v1/settings` | Workspace folder, file scope, templates, server defaults | ✅ |
+| `GET` · `POST` | `/v1/speech/status` · `/start` · `/stop` | Speech recognition state and control | ✅ |
+| `GET` | `/v1/speech/stream` | Live commands and dictation (SSE) | ✅ |
+| `POST` | `/v1/speech/transcribe` | Transcribe a WAV file | ✅ |
+| `GET` · `PUT` | `/v1/audio/inputs` · `/v1/audio/input` | List and choose the microphone | ✅ |
 
 ¹ unless the body carries tool results for a parked run.
 
-Anything else → `404`. Wrong method on a real path → also `404`, not `405`.
+Anything else → `404`. A wrong method on a core route → also `404`; on settings and speech routes → `405`.
+
+---
+
+## Two modes
+
+| `model` / `mode` | You get |
+|---|---|
+| `cephable-agent` / `"assistant"` (default) | Cephable's desktop agent does the task with its own tools and yours; latest user message is the task |
+| `cephable-model` / `"model"` | A chat model for **your** agent loop: your system prompt, the full `messages` history every call, only your tools. Cephable's content handling for long input/output runs hidden underneath |
+
+Both take `builtInTools: { allow, deny }` (tool names or `@content`, `@destructive`, `@observe`, … groups) to choose which of Cephable's tools may run.
 
 ---
 
@@ -37,6 +55,9 @@ Anything else → `404`. Wrong method on a real path → also `404`, not `405`.
   "additionalWorkflowPrompt": "Use metric units.",   // advisory style preferences
   "answerContract": "End with FINAL ANSWER: <number>", // BINDING output shape
   "include": { "steps": true, "trace": false, "events": false },
+  "mode": "assistant",                   // or "model" — then send "messages" instead of "prompt"
+  "builtInTools": { "deny": ["@destructive"] },   // allow/deny Cephable's own tools
+  "stream": false,                       // true → SSE: run.started, run.step, run.status, run.completed
   "restrictToWorkspace": true,           // default false — confine file/CLI tools
   "continuation": false,                 // continue the previous conversation
   "allowDestructiveTools": false,        // default false — see warning below
@@ -82,7 +103,8 @@ Anything else → `404`. Wrong method on a real path → also `404`, not `405`.
 |---|---|
 | `200` | `completed`, or `awaiting_tool_results` (a parked run is a success) |
 | `500` | The run ran and ended `failed` / `canceled` / `terminated` — **body is a full record**, `schemaVersion` is still `1` |
-| `400` | Bad request, body > 1 MiB, malformed JSON, run timeout, init failure |
+| `400` | Bad request, malformed JSON, unknown tool name, run timeout, init failure |
+| `413` | Body > 1 MiB |
 | `401` | Bad or missing key |
 | `409` | A run is already active or preparing |
 

@@ -20,7 +20,7 @@ Two settings are not optional, and both are about the fact that this is a real a
 
 * `max_retries=0` — a retry either collides with the run it just started (409) or starts a duplicate.
 * a very long `timeout` — an agent run takes tens of seconds to minutes, far past SDK defaults. An SDK
-  that gives up does not stop the run; it keeps going inside Cephable.
+  that gives up cancels the run, and the work is lost.
 """
 
 from __future__ import annotations
@@ -131,13 +131,15 @@ def build_model(endpoint: str, thinking: str, capture: CephableRecordCapture) ->
     return ChatOpenAI(
         base_url=f"{endpoint}/v1",
         api_key=os.environ["CEPHABLE_AUTOMATE_KEY"],
-        model="cephable-agent",  # ignored by Cephable; there is one assistant
-        # Agent runs are long — far past SDK defaults. An SDK that gives up does not stop the run.
+        # Cephable's own agent runs the loop. "cephable-model" would make Cephable a plain model and leave
+        # the loop to us — that is the python-langgraph-own-loop sample.
+        model="cephable-agent",
+        # Agent runs are long — far past SDK defaults. An SDK that gives up cancels the run.
         timeout=930.0,
         # A retry either collides with the run it just started (409) or starts a duplicate.
         max_retries=0,
-        # Sampling knobs are ignored by Cephable (the app's model profile governs them), but
-        # `thinkingLevel` in the extension object is honored per run.
+        # `temperature`/`top_p` are honored if you set them; the model profile's defaults suit this task.
+        # `thinkingLevel` rides the `cephable` extension object and applies per run.
         extra_body={"cephable": {"thinkingLevel": thinking, "include": {"trace": False, "events": False}}},
         http_client=httpx.Client(
             timeout=httpx.Timeout(connect=5.0, read=930.0, write=30.0, pool=5.0),

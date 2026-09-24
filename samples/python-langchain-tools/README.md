@@ -11,6 +11,9 @@ The same job is implemented twice, so you can see both integration styles side b
 | **`run_native.py`** | Cephable's native `/v1/runs` route | Standard library only. Nothing to install. |
 | **`run_langchain.py`** | LangChain's `ChatOpenAI` + `bind_tools` | Zero Cephable-specific code in the agent loop. |
 
+Both let **Cephable's** agent run the loop. To run the loop yourself with Cephable as just the model, see
+[python-langgraph-own-loop](../python-langgraph-own-loop).
+
 Everything runs on the machine. No prompt, no order, and no customer record leaves the device.
 
 ---
@@ -190,8 +193,9 @@ or remember a policy threshold. Put the judgement in your code where you can tes
 adapts or explains. Returning `"not found"` as a *success* teaches it to keep guessing. Notice that
 `lookup_order` lists the valid ids in its error — the agent reads that and corrects itself.
 
-**Cancel on your error path.** Your HTTP request dying does not stop the run; it keeps going inside
-Cephable and holds the single inference slot. `run_native.py` cancels on `KeyboardInterrupt`.
+**Cancel on your error path.** Your request dying cancels a run that is still working, but a run parked
+on your tools keeps the single inference slot until it times out. `run_native.py` cancels on
+`KeyboardInterrupt`, which covers both.
 
 ### Getting the run record out of LangChain
 

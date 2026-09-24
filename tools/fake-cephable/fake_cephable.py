@@ -27,6 +27,9 @@ What it reproduces faithfully, because these are the things clients get wrong:
   `tool_call.id` and a resume recognised from echoed `role: "tool"` messages.
 * A failed run as HTTP 500 carrying a complete record with `schemaVersion: 1`.
 * 409 while a run is in flight, and the `busy` / `awaitingToolResults` flags on `/health`.
+* Model mode (`model: "cephable-model"`): stateless — the next step is worked out from the conversation
+  the caller sends, parallel tool calls included — and no `cephable` record unless `cephable.include`.
+* `stream: true` on chat completions: OpenAI chunks, `: keep-alive` comments, `data: [DONE]`.
 
 What it does not do: run a model, execute Cephable's own tools, honour `restrictToWorkspace`, or enforce
 most validation. It logs what it received so you can see your request was shaped correctly.
@@ -106,6 +109,35 @@ SCRIPTS: Dict[str, Dict[str, Any]] = {
             {"title": "Respond to user", "toolName": "respond_to_user"},
         ],
     },
+    # samples/python-langgraph-own-loop - the caller's LangGraph loop owns everything and Cephable is
+    # only the model, so this script is read by model mode: a lookup, two parallel reads in one turn,
+    # then a write the sample gates behind a human approval. `follow_up` answers a second user turn.
+    "own-loop": {
+        "rounds": [
+            [{"id": "client_tool_o1", "name": "lookup_order", "arguments": {"order_id": "4471"}}],
+            [
+                {"id": "client_tool_o2", "name": "lookup_customer", "arguments": {"email_or_id": "C-1001"}},
+                {"id": "client_tool_o3", "name": "get_policy", "arguments": {"topic": "late_shipment"}},
+            ],
+            [{"id": "client_tool_o4", "name": "issue_credit",
+              "arguments": {"order_id": "4471", "percent": 15,
+                            "reason": "Late shipment on a gold-tier account (late_shipment policy)."}}],
+        ],
+        "answer": "\n".join([
+            "SITUATION: Order 4471 is held because SW-200 is backordered, and it is past its promised date.",
+            "ACTION TAKEN: A 15% goodwill credit was issued under the late_shipment policy.",
+            "ESCALATION: Yes - two prior complaints mean a named owner, not a queue.",
+            "DRAFT REPLY:",
+            "Hi Dana, your order is late and that is on us. We have credited 15% of the order total ...",
+        ]),
+        "follow_up": "Dear Ms Whitfield,\n\nThank you for your patience regarding order 4471. ...",
+        "steps": [
+            {"title": "Look up order", "toolName": "lookup_order"},
+            {"title": "Look up customer", "toolName": "lookup_customer"},
+            {"title": "Read policy", "toolName": "get_policy"},
+            {"title": "Issue credit", "toolName": "issue_credit"},
+        ],
+    },
     # A run with no caller tools at all, for testing the plain path.
     # samples/nextjs-ai-sdk-agent-loop - a read, then a tool the sample gates on approval.
     "refund": {
@@ -133,7 +165,13 @@ SCRIPTS: Dict[str, Dict[str, Any]] = {
 
 SCRIPT: List[List[Dict[str, Any]]] = []
 FINAL_TEXT = ""
+FOLLOW_UP_TEXT = ""
 STEPS: List[Dict[str, Any]] = []
+
+MODEL_MODE_ID = "cephable-model"
+
+#: Every chat-completions body received, newest last — so a test can assert what a client sent.
+RECEIVED: List[Dict[str, Any]] = []
 
 BACKEND = {"flavorId": "vulkan", "accelerator": "vulkan", "cpuFallback": False}
 USAGE = {"inputTokens": 5120, "outputTokens": 344, "generationMs": 8345, "ttftMs": 610, "tps": 41.2}
@@ -208,7 +246,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/v1/models":
             return self._json(200, {"object": "list", "data": [
-                {"id": "cephable-agent", "object": "model", "owned_by": "cephable"},
+                {"id": "cephable-agent", "object": "model", "owned_by": "cephable", "mode": "assistant"},
+                {"id": MODEL_MODE_ID, "object": "model", "owned_by": "cephable", "mode": "model"},
             ]})
 
         if self.path == "/v1/automate/models":
@@ -341,6 +380,12 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(messages, list):
             return self._json(400, {"error": {
                 "message": "messages must be an array", "type": "invalid_request_error"}})
+        RECEIVED.append(body)
+
+        mode = (body.get("cephable") or {}).get("mode") or (
+            "model" if body.get("model") == MODEL_MODE_ID else "assistant")
+        if mode == "model":
+            return self._model_turn(body, messages)
 
         tool_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "tool"]
         if tool_messages:
@@ -375,6 +420,113 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             STATE.update(round=0, busy=True, parked=True)
         return self._json(200, self._chat_tool_calls(0))
+
+    def _model_turn(self, body: Dict[str, Any], messages: List[Any]) -> None:
+        """
+        Model mode is stateless, so the next step comes from the conversation alone: the tool rounds
+        answered since the last user message say how far through the script this turn is, and a user
+        turn after an earlier finished answer is a follow-up.
+        """
+        turns = [m for m in messages if isinstance(m, dict) and m.get("role") != "system"]
+        if not any(m.get("role") == "user" for m in turns):
+            return self._json(400, {"error": {
+                "message": "messages must contain at least one user message", "type": "invalid_request_error"}})
+        last_user = max(i for i, m in enumerate(turns) if m.get("role") == "user")
+        since_user = turns[last_user + 1:]
+        rounds_done = sum(1 for m in since_user if m.get("role") == "assistant" and m.get("tool_calls"))
+        earlier_answers = [m for m in turns[:last_user] if m.get("role") == "assistant" and not m.get("tool_calls")]
+        declared = [t.get("function", {}).get("name") for t in body.get("tools") or []]
+        system = [m for m in messages if isinstance(m, dict) and m.get("role") in {"system", "developer"}]
+
+        log("/v1/chat/completions  [model mode] " + str(len(turns)) + " turn(s), system prompt="
+            + ("yes" if system else "no") + ", tools=" + str(declared)
+            + ", stream=" + str(body.get("stream") is True))
+
+        if earlier_answers:
+            return self._reply(body, self._completion(FOLLOW_UP_TEXT or FINAL_TEXT, body))
+        if declared and rounds_done < len(SCRIPT):
+            return self._reply(body, self._completion(None, body, SCRIPT[rounds_done], rounds_done))
+        return self._reply(body, self._completion(FINAL_TEXT, body))
+
+    def _completion(
+        self,
+        content: Any,
+        body: Dict[str, Any],
+        calls: List[Dict[str, Any]] | None = None,
+        round_index: int = 0,
+    ) -> Dict[str, Any]:
+        model_mode = body.get("model") == MODEL_MODE_ID or (body.get("cephable") or {}).get("mode") == "model"
+        message: Dict[str, Any] = {"role": "assistant", "content": content}
+        if calls:
+            message["tool_calls"] = [{
+                "id": "call_tok-" + str(round_index) + "." + call["id"],
+                "type": "function",
+                "function": {"name": call["name"], "arguments": json.dumps(call["arguments"])},
+            } for call in calls]
+        completion: Dict[str, Any] = {
+            "id": "automate-run-fake",
+            "object": "chat.completion",
+            "created": 1789412568,
+            "model": MODEL_MODE_ID if model_mode else "cephable-agent",
+            "choices": [{"index": 0, "message": message,
+                         "finish_reason": "tool_calls" if calls else "stop", "logprobs": None}],
+            "usage": {"prompt_tokens": 1840, "completion_tokens": 212, "total_tokens": 2052},
+        }
+        # Model mode leaves Cephable's own record out unless the caller asks for it.
+        if not model_mode or (body.get("cephable") or {}).get("include") is not None:
+            completion["cephable"] = {
+                "schemaVersion": 1, "requestId": "automate-run-fake",
+                "mode": "model" if model_mode else "assistant",
+                "status": "awaiting_tool_results" if calls else "completed",
+                "model": "gemma-4-4b-it-Q4_K_M.gguf", "backend": BACKEND,
+                # In model mode the steps are the hidden loop's own tool calls — here, a stand-in for
+                # the long-form draft a final answer is written with.
+                "steps": ([] if calls else [{"id": "h1", "index": 0, "title": "Generate text",
+                                              "status": "success", "toolName": "generate_text"}])
+                if model_mode else STEPS,
+            }
+        return completion
+
+    def _reply(self, body: Dict[str, Any], completion: Dict[str, Any]) -> None:
+        if body.get("stream") is True:
+            return self._sse(completion, (body.get("stream_options") or {}).get("include_usage") is True)
+        return self._json(200, completion)
+
+    def _sse(self, completion: Dict[str, Any], include_usage: bool) -> None:
+        """The real server's streaming shape: a role chunk, a heartbeat, the content, finish, [DONE]."""
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream; charset=utf-8")
+        self.send_header("cache-control", "no-store")
+        self.send_header("connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        base = {k: completion[k] for k in ("id", "created", "model")}
+        base["object"] = "chat.completion.chunk"
+        choice = completion["choices"][0]
+        message = choice["message"]
+
+        def send(data: Any) -> None:
+            payload = data if isinstance(data, str) else json.dumps(data)
+            self.wfile.write(("data: " + payload + "\n\n").encode("utf-8"))
+            self.wfile.flush()
+
+        send({**base, "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}]})
+        self.wfile.write(b": keep-alive\n\n")
+        if message.get("tool_calls"):
+            send({**base, "choices": [{"index": 0, "delta": {"tool_calls": [
+                {"index": i, **call} for i, call in enumerate(message["tool_calls"])]}, "finish_reason": None}]})
+        else:
+            words = (message.get("content") or "").split(" ")
+            for i in range(0, len(words), 6):
+                piece = " ".join(words[i:i + 6]) + (" " if i + 6 < len(words) else "")
+                send({**base, "choices": [{"index": 0, "delta": {"content": piece}, "finish_reason": None}]})
+        final: Dict[str, Any] = {**base, "choices": [{"index": 0, "delta": {}, "finish_reason": choice["finish_reason"]}]}
+        if "cephable" in completion:
+            final["cephable"] = completion["cephable"]
+        send(final)
+        if include_usage:
+            send({**base, "choices": [], "usage": completion["usage"]})
+        send("[DONE]")
 
     # ── record builders ──────────────────────────────────────────────────────
 
@@ -481,6 +633,26 @@ class Handler(BaseHTTPRequestHandler):
         }
 
 
+def use_script(name: str, scenario: str = "happy") -> None:
+    """Bind a script into the names the handlers read. Tests call this before serving in-process."""
+    global SCRIPT, FINAL_TEXT, FOLLOW_UP_TEXT, STEPS
+    chosen = SCRIPTS[name]
+    SCRIPT = chosen["rounds"]
+    FINAL_TEXT = chosen["answer"]
+    FOLLOW_UP_TEXT = chosen.get("follow_up", "")
+    STEPS = [
+        {"id": f"s{index}", "index": index, "status": "success", **step}
+        for index, step in enumerate(chosen["steps"])
+    ]
+    STATE.update(round=0, busy=False, parked=False, scenario=scenario)
+    RECEIVED.clear()
+
+
+def serve(port: int = 0) -> ThreadingHTTPServer:
+    """A server bound to `port` (0 = any free one), not yet serving. Call `serve_forever()` on it."""
+    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fake Cephable Automate HTTP Server")
     parser.add_argument("--port", type=int, default=4319,
@@ -491,17 +663,7 @@ def main() -> int:
                         help="which sample's tools the fake agent should call (default: support)")
     args = parser.parse_args()
 
-    # Bind the chosen script into the module-level names the handlers read.
-    global SCRIPT, FINAL_TEXT, STEPS
-    chosen = SCRIPTS[args.script]
-    SCRIPT = chosen["rounds"]
-    FINAL_TEXT = chosen["answer"]
-    STEPS = [
-        {"id": f"s{index}", "index": index, "status": "success", **step}
-        for index, step in enumerate(chosen["steps"])
-    ]
-
-    STATE["scenario"] = args.scenario
+    use_script(args.script, args.scenario)
     log("listening on http://127.0.0.1:" + str(args.port)
         + "  scenario=" + args.scenario + "  script=" + args.script)
     log("the fake agent will call: "
@@ -510,7 +672,7 @@ def main() -> int:
     log("  CEPHABLE_ENDPOINT=http://127.0.0.1:" + str(args.port))
     log("  CEPHABLE_AUTOMATE_KEY=" + TOKEN)
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = serve(args.port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -127,8 +127,8 @@ def main() -> int:
             print(f"\nRequest failed ({error.status}): {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        # Our HTTP request dying does not stop the run — it keeps going inside Cephable and holds the
-        # single inference slot. Cancel it explicitly.
+        # A run parked on our tools keeps the single inference slot after our request dies. Cancel it
+        # explicitly.
         print("\nInterrupted. Cancelling the run inside Cephable.", file=sys.stderr)
         client.cancel(force=True)
         return 130

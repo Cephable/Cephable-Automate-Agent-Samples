@@ -48,6 +48,7 @@ exercises the error path. Pick the one matching the sample you are running:
 | `support` *(default)* | [python-langchain-tools](../../samples/python-langchain-tools) | `lookup_order`, `get_policy` |
 | `incidents` | [nextjs-vercel-ai-ui](../../samples/nextjs-vercel-ai-ui) | `list_incidents`, `get_incident`, `render_timeline`, `draft_status_post` |
 | `refund` | [nextjs-ai-sdk-agent-loop](../../samples/nextjs-ai-sdk-agent-loop) | `lookup_order`, `issue_refund` (the second is gated behind approval in that sample) |
+| `own-loop` | [python-langgraph-own-loop](../../samples/python-langgraph-own-loop) | `lookup_order`; then `lookup_customer` + `get_policy` together; then `issue_credit`. Answers a second user turn with a follow-up reply |
 | `plain` | anything | nothing — answers immediately |
 
 The [public-gateway](../../samples/public-gateway) sample works with any script; its own tests use an
@@ -74,6 +75,12 @@ These are the behaviours a client has to get right, so the fake is strict about 
   clients get wrong most: a 500 here is not a server fault, and `schemaVersion` — not the status code —
   is what tells you whether a run happened.
 - **`409` while a run is in flight**, and the `busy` / `awaitingToolResults` flags on `/health`.
+- **Model mode** (`model: "cephable-model"`, or `cephable.mode: "model"`): stateless, like the real thing —
+  the next step is worked out from the conversation you send (tool rounds answered since the last user
+  message; a user turn after an earlier answer is a follow-up). Parallel tool calls come back in one
+  `tool_calls` array, and there is no `cephable` record unless you pass `cephable.include`.
+- **`stream: true` on chat completions**: a role chunk, a `: keep-alive` comment, content (or a
+  `delta.tool_calls` chunk), the `finish_reason` chunk, an optional usage chunk, then `data: [DONE]`.
 - **`400` on the validation failures clients actually hit**: an empty prompt, a non-array `results`, a
   result missing its `id`, a chat completion with no string user message.
 
@@ -103,3 +110,17 @@ It is a protocol fake, not an emulator:
 
 So: use it to get your client's plumbing right, then run against real Cephable before you believe
 anything about quality or latency.
+
+## Using it from tests
+
+Import it and serve it in-process — `python-langgraph-own-loop/test_sample.py` does this:
+
+```python
+import fake_cephable
+fake_cephable.use_script("own-loop")
+server = fake_cephable.serve(0)            # any free port
+threading.Thread(target=server.serve_forever, daemon=True).start()
+# … point your client at server.server_address, then inspect fake_cephable.RECEIVED
+```
+
+`RECEIVED` holds every chat-completions body the fake has seen, so a test can assert what went over the wire.
